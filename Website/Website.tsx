@@ -1,4 +1,4 @@
-import styles from "./iframe.module.css";
+import styles from "./website.module.css";
 
 const STORAGE_KEY = "iframe.settings";
 
@@ -11,7 +11,7 @@ function loadUrl(): string {
   }
 }
 
-export default function IFrame({ config }: { config: Record<string, unknown> }) {
+export default function Website({ config }: { config: Record<string, unknown> }) {
   const url = typeof config.url === "string" ? config.url : loadUrl();
 
   if (!url) {

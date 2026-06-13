@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import moduleConfig from "./modules.config.json";
 import * as HeatMap from "./HeatMap";
-import * as IFrame from "./IFrame";
+import * as Website from "./Website";
 
 export type ModuleEntry = {
   component: ComponentType<{ config: Record<string, unknown> }>;
@@ -26,7 +26,7 @@ export type ModuleEntry = {
 
 const avaliableModules: Record<string, ModuleEntry> = {
   HeatMap: { component: HeatMap.default, config: HeatMap.config },
-  IFrame: { component: IFrame.default, config: IFrame.config },
+  Website: { component: Website.default, config: Website.config },
 };
 
 const modules: Record<string, ModuleEntry> = Object.fromEntries(
