@@ -14,7 +14,9 @@ export const config = {
   minH: 4,
   comp: {
     url: "",
-    allowInteract: "no-scroll", // true | false | "no-scroll"
+    // true | false | "no-scroll"
+    // `false` will block all interactions with a blocker
+    allowInteract: "no-scroll",
     crop: {
       x: 0,
       y: 0,
