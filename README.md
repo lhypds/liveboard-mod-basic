@@ -11,5 +11,5 @@ Setup
 
 Clone to `liveboard/src`, rename the folder to `modules` to use.  
 
-modules.config.json
+`modules.config.json`  
 Modules config file, enable or disable modules, etc.  
