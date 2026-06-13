@@ -21,6 +21,7 @@ export type ModuleEntry = {
     minH?: number;
     maxW?: number;
     maxH?: number;
+    comp?: Record<string, unknown>;
   };
 };
 

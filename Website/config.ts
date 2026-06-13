@@ -12,4 +12,7 @@ export const config = {
   h: 15,
   minW: 6,
   minH: 4,
+  comp: {
+    url: "",
+  },
 };

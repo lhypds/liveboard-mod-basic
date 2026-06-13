@@ -12,7 +12,8 @@ function loadUrl(): string {
 }
 
 export default function Website({ config }: { config: Record<string, unknown> }) {
-  const url = typeof config.url === "string" ? config.url : loadUrl();
+  const comp = config.comp as { url?: string } | undefined;
+  const url = typeof comp?.url === "string" ? comp.url : loadUrl();
 
   if (!url) {
     return (
