@@ -1,5 +1,8 @@
 {
   "HeatMap": {
     "enabled": true
+  },
+  "IFrame": {
+    "enabled": true
   }
 }
