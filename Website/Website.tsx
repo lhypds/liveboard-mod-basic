@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import styles from "./website.module.css";
 
 const STORAGE_KEY = "iframe.settings";
@@ -20,9 +20,11 @@ type CropComp = {
 };
 
 export default function Website({ config }: { config: Record<string, unknown> }) {
-  const comp = config.comp as { url?: string; allowInteract?: boolean; crop?: CropComp } | undefined;
+  const comp = config.comp as { url?: string; allowInteract?: true | false | "no-scroll"; crop?: CropComp } | undefined;
   const url = typeof comp?.url === "string" ? comp.url : loadUrl();
-  const allowInteract = comp?.allowInteract !== false;
+  const allowInteract = comp?.allowInteract ?? true;
+  const blockAll = allowInteract === false;
+  const blockScroll = allowInteract === "no-scroll";
   const crop = comp?.crop;
 
   const cropX = crop?.x ?? 0;
@@ -31,9 +33,18 @@ export default function Website({ config }: { config: Record<string, unknown> })
   const renderH = crop?.renderH ?? 1080;
   const hasCrop = cropX !== 0 || cropY !== 0;
 
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    if (iframeRef.current) {
+      if (blockScroll) iframeRef.current.setAttribute("scrolling", "no");
+      else iframeRef.current.removeAttribute("scrolling");
+    }
+  }, [blockScroll]);
+
   const handleLoad = useCallback(
     (e: React.SyntheticEvent<HTMLIFrameElement>) => {
-      if (!hasCrop) return;
+      if (!hasCrop && !blockScroll) return;
       try {
         const doc = e.currentTarget.contentDocument;
         if (doc?.body) doc.body.style.overflow = "hidden";
@@ -41,7 +52,7 @@ export default function Website({ config }: { config: Record<string, unknown> })
         // cross-origin: cannot access contentDocument
       }
     },
-    [hasCrop],
+    [hasCrop, blockScroll],
   );
 
   if (!url) {
@@ -54,8 +65,9 @@ export default function Website({ config }: { config: Record<string, unknown> })
 
   return (
     <div className={styles.container}>
-      {!allowInteract && <div className={styles.blocker} />}
+      {blockAll && <div className={styles.blocker} />}
       <iframe
+        ref={iframeRef}
         src={url}
         style={
           hasCrop
