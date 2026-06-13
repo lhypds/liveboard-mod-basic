@@ -14,5 +14,11 @@ export const config = {
   minH: 4,
   comp: {
     url: "",
+    crop: {
+      x: 0,
+      y: 0,
+      renderW: 1920,
+      renderH: 1080,
+    },
   },
 };
