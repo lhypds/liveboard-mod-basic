@@ -31,8 +31,10 @@ export const config = {
       y: 0,
       renderW: 1920,
       renderH: 1080,
+      renderSizeControl: false,
     },
     // > 0, 1 = no zoom, 0.5 = zoom out, 2 = zoom in
     zoom: 1,
+    renderSizeControl: false,
   },
 };

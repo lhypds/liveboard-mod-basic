@@ -17,6 +17,7 @@ type CropComp = {
   y?: number;
   renderW?: number;
   renderH?: number;
+  renderSizeControl?: boolean;
 };
 
 export default function Website({ config }: { config: Record<string, unknown> }) {
@@ -31,8 +32,9 @@ export default function Website({ config }: { config: Record<string, unknown> })
 
   const cropX = crop?.x ?? 0;
   const cropY = crop?.y ?? 0;
-  const renderW = crop?.renderW ?? 1920;
-  const renderH = crop?.renderH ?? 1080;
+  const renderSizeControl = crop?.renderSizeControl ?? false;
+  const renderW = renderSizeControl ? (crop?.renderW ?? 1920) : undefined;
+  const renderH = renderSizeControl ? (crop?.renderH ?? 1080) : undefined;
   const hasCrop = cropX !== 0 || cropY !== 0;
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -85,8 +87,8 @@ export default function Website({ config }: { config: Record<string, unknown> })
                 position: "absolute",
                 top: -cropY,
                 left: -cropX,
-                width: renderW,
-                height: renderH,
+                width: renderW ?? "100%",
+                height: renderH ?? "100%",
                 border: "none",
                 transform: zoom !== 1 ? `scale(${zoom})` : undefined,
                 transformOrigin: zoom !== 1 ? "top left" : undefined,
