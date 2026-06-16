@@ -25,5 +25,7 @@ export const config = {
       renderW: 1920,
       renderH: 1080,
     },
+    // > 0, 1 = no zoom, 0.5 = zoom out, 2 = zoom in
+    zoom: 1,
   },
 };
