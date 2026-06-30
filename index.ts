@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import moduleConfig from "./modules.config.json" with { type: "json" };
 import * as HeatMap from "./HeatMap";
 import * as Website from "./Website";
+import * as Note from "./Note";
 
 export type ModuleEntry = {
   component: ComponentType<{ config: Record<string, unknown> }>;
@@ -30,6 +31,7 @@ export type ModuleEntry = {
 const avaliableModules: Record<string, ModuleEntry> = {
   HeatMap: { component: HeatMap.default, config: HeatMap.config },
   Website: { component: Website.default, config: Website.config },
+  Note: { component: Note.default, config: Note.config },
 };
 
 const modules: Record<string, ModuleEntry> = Object.fromEntries(

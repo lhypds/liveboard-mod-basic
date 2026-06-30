@@ -6,5 +6,9 @@
   "Website": {
     "enabled": true,
     "allowMultipleInstances": true
+  },
+  "Note": {
+    "enabled": true,
+    "allowMultipleInstances": true
   }
 }

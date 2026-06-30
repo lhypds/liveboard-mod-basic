@@ -1,0 +1,23 @@
+.container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 3px;
+}
+
+/* TextArea wrapper — fill remaining card height */
+.container > div {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Hide the manual drag-resize handle; card grid handles sizing */
+.container > div > div {
+  display: none;
+}
+
+.textarea {
+  height: 100%;
+  box-sizing: border-box;
+  outline: none;
+}
