@@ -15,10 +15,10 @@ export const config = {
   ],
   x: 0,
   y: 0,
-  w: 20,
-  h: 15,
-  minW: 6,
-  minH: 4,
+  w: 40,
+  h: 30,
+  minW: 12,
+  minH: 8,
   comp: {
     url: "",
     // true | false | "no-scroll"
