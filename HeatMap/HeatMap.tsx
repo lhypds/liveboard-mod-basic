@@ -26,6 +26,8 @@ export default function HeatMap(_: { config: Record<string, unknown> }) {
       style: "mapbox://styles/mapbox/light-v11",
       center: [139.7517, 35.6895],
       zoom: 10,
+      // Keep the WebGL buffer readable so PNG export can capture the map
+      preserveDrawingBuffer: true,
     });
     mapRef.current = map;
 
