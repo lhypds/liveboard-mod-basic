@@ -5,8 +5,8 @@ export const config = {
   info: [],
   x: 0,
   y: 0,
-  w: 32,
-  h: 20,
+  w: 19,
+  h: 16,
   minW: 8,
   minH: 6,
   comp: {
