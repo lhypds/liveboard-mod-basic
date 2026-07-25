@@ -30,7 +30,6 @@ export default function Note({ config }: { config: Record<string, unknown> }) {
       <TextArea
         value={value}
         onChange={handleChange}
-        placeholder="Type your notes here..."
         className={styles.textarea}
       />
     </div>
