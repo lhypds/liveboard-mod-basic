@@ -85,7 +85,7 @@
 
 .temperature {
   font-size: 28px;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1.1;
 }
 
@@ -147,6 +147,8 @@
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
+  /* Fixed line box so CJK labels ("现在") and digit labels ("15:00") stay on the same baseline */
+  line-height: 16px;
 }
 
 .hourlyItem .icon {
