@@ -24,7 +24,7 @@ export const config = {
   ],
   x: 0,
   y: 0,
-  w: 20,
+  w: 18,
   h: 22,
   minW: 12,
   minH: 14,
