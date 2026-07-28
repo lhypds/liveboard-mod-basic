@@ -1,0 +1,13 @@
+{
+  "name": "@liveboard-mod/basic",
+  "version": "0.0.0",
+  "private": true,
+  "description": "liveboard module repo — declares its own npm dependencies so the parent repo never has to.",
+  "scripts": {
+    "typecheck": "tsc -p ."
+  },
+  "peerDependencies": {
+    "react": "^19.2.6",
+    "react-i18next": "^17.0.8"
+  }
+}
