@@ -6,14 +6,10 @@ import {
   primeGeocodeCache,
   LocationNotFoundError,
   fetchCurrentWeather,
-  findNearbyTyphoon,
-  findRecentEarthquakes,
   fetchMonthlyNormals,
   monthlyNormalsFromFile,
   type GeocodeResult,
   type CurrentWeather,
-  type TyphoonInfo,
-  type EarthquakeInfo,
   type MonthlyNormals,
 } from "./api";
 import { describeWeatherCode, type WeatherIcon, type Lang } from "./weatherCodes";
@@ -35,7 +31,6 @@ function formatMonth(monthIndex: number, lang: Lang): string {
 }
 
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
-const EARTHQUAKE_WITHIN_HOURS = 24;
 
 // Location box: how many candidates the dropdown lists, how long typing has to settle before
 // asking the geocoder, and the shortest query worth asking about at all.
@@ -57,10 +52,6 @@ const STRINGS: Record<string, Record<Lang, string>> = {
   wind: { en: "Wind", ja: "風速", zh: "风速" },
   high: { en: "High", ja: "最高", zh: "最高" },
   low: { en: "Low", ja: "最低", zh: "最低" },
-  typhoonNearby: { en: "Typhoon nearby", ja: "台風接近中", zh: "台风接近" },
-  kmAway: { en: "km away", ja: "km先", zh: "公里外" },
-  earthquake: { en: "Earthquake", ja: "地震", zh: "地震" },
-  intensity: { en: "Intensity", ja: "震度", zh: "震度" },
   next24h: { en: "Next 24 hours", ja: "今後24時間", zh: "未来24小时" },
   now: { en: "Now", ja: "現在", zh: "现在" },
   upcomingDays: { en: "Next 2 days", ja: "今後2日間", zh: "未来2天" },
@@ -134,11 +125,9 @@ function WeatherIconGlyph({ icon }: { icon: WeatherIcon }) {
 }
 
 export default function Weather({ config }: { config: Record<string, unknown> }) {
-  const comp = config.comp as { location?: string; typhoonRadiusKm?: number; earthquakeRadiusKm?: number } | undefined;
+  const comp = config.comp as { location?: string } | undefined;
   const save = config._save as ((comp: Record<string, unknown>) => void) | undefined;
   const configuredLocation = (comp?.location ?? "").trim();
-  const typhoonRadiusKm = typeof comp?.typhoonRadiusKm === "number" ? comp.typhoonRadiusKm : 800;
-  const earthquakeRadiusKm = typeof comp?.earthquakeRadiusKm === "number" ? comp.earthquakeRadiusKm : 300;
   const lang = useLang();
 
   // `location` is what the weather is fetched for; `query` is what is currently typed in the box.
@@ -163,8 +152,6 @@ export default function Weather({ config }: { config: Record<string, unknown> })
   const [reloadKey, setReloadKey] = useState(0);
   const geoRef = useRef<GeocodeResult | null>(null);
   const [weather, setWeather] = useState<CurrentWeather | null>(null);
-  const [typhoon, setTyphoon] = useState<TyphoonInfo | null>(null);
-  const [earthquakes, setEarthquakes] = useState<EarthquakeInfo[]>([]);
   const [normals, setNormals] = useState<MonthlyNormals | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error" | "notFound">("idle");
 
@@ -264,14 +251,6 @@ export default function Weather({ config }: { config: Record<string, unknown> })
         setWeather(current);
         setStatus("ready");
 
-        findNearbyTyphoon({ lat: geo.lat, lon: geo.lon }, typhoonRadiusKm)
-          .then((info) => { if (!cancelled) setTyphoon(info); })
-          .catch(() => { if (!cancelled) setTyphoon(null); });
-
-        findRecentEarthquakes({ lat: geo.lat, lon: geo.lon }, earthquakeRadiusKm, EARTHQUAKE_WITHIN_HOURS)
-          .then((quakes) => { if (!cancelled) setEarthquakes(quakes); })
-          .catch(() => { if (!cancelled) setEarthquakes([]); });
-
         // Wolfram's prebuilt baseline (refresh.sh → data/monthly-mean-temp.json) is preferred: it
         // costs no request at all. The live archive only fills in when this location isn't in
         // location.txt, or its current month has too few years on record — ten years of daily data
@@ -305,7 +284,7 @@ export default function Weather({ config }: { config: Record<string, unknown> })
       cancelled = true;
       clearInterval(id);
     };
-  }, [location, reloadKey, typhoonRadiusKm, earthquakeRadiusKm]);
+  }, [location, reloadKey]);
 
   // The box stays on screen in every state — a wrong or unknown location has to be fixable without
   // opening the config editor.
@@ -406,29 +385,6 @@ export default function Weather({ config }: { config: Record<string, unknown> })
 
   return (
     <div className={styles.container}>
-      {typhoon && (
-        <div className={styles.typhoonBanner}>
-          <span className={styles.typhoonName}>⚠ {STRINGS.typhoonNearby[lang]}: {typhoon.name}</span>
-          <span className={styles.typhoonDistance}>{typhoon.distanceKm} {STRINGS.kmAway[lang]}</span>
-        </div>
-      )}
-
-      {earthquakes.length > 0 && (
-        <div className={styles.earthquakeSection}>
-          {earthquakes.map((eq) => (
-            <div className={styles.earthquakeBanner} key={eq.time + eq.locationJa}>
-              <span className={styles.earthquakeName}>
-                ⚠ {STRINGS.earthquake[lang]}: {lang === "en" ? eq.locationEn : eq.locationJa}
-                {eq.magnitude != null && ` M${eq.magnitude.toFixed(1)}`}
-              </span>
-              <span className={styles.earthquakeDistance}>
-                {STRINGS.intensity[lang]} {eq.maxIntensity} · {eq.distanceKm} {STRINGS.kmAway[lang]}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
       {locationField}
 
       <div className={styles.header}>

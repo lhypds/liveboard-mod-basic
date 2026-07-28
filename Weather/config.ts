@@ -12,20 +12,12 @@ export const config = {
           value: { en: "Open-Meteo", ja: "Open-Meteo", zh: "Open-Meteo" },
         },
         {
-          key: { en: "Typhoon Tracking", ja: "台風情報", zh: "台风追踪" },
-          value: { en: "GDACS", ja: "GDACS", zh: "GDACS" },
-        },
-        {
           key: { en: "Monthly Mean Temperature", ja: "月別平年気温", zh: "月平均气温" },
           value: {
             en: "Wolfram|Alpha (10 yr), Open-Meteo Archive fallback",
             ja: "Wolfram|Alpha（10年）、予備: Open-Meteo Archive",
             zh: "Wolfram|Alpha（10年），备用 Open-Meteo Archive",
           },
-        },
-        {
-          key: { en: "Earthquake Info", ja: "地震情報", zh: "地震信息" },
-          value: { en: "JMA (Japan Meteorological Agency)", ja: "気象庁", zh: "日本气象厅" },
         },
       ],
     },
@@ -39,7 +31,5 @@ export const config = {
   allowMultipleInstances: true,
   comp: {
     location: "Tokyo",
-    typhoonRadiusKm: 800,
-    earthquakeRadiusKm: 300,
   },
 };

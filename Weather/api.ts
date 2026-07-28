@@ -1,6 +1,5 @@
 // Data sources:
 // - Open-Meteo: current weather + geocoding — https://open-meteo.com
-// - GDACS: active tropical cyclone tracking — https://www.gdacs.org
 // - Wolfram|Alpha: monthly mean temperatures, the baseline the card compares today against.
 //   Needs an app id, so refresh.sh builds ./data/monthly-mean-temp.json for every location in
 //   location.txt and the frontend reads it statically (monthlyNormalsFromFile below).
@@ -59,26 +58,6 @@ export type CurrentWeather = {
   upcomingDays: DailyForecastPoint[];
   // Null only if the archive has no record for yesterday, which the card then just omits.
   yesterday: DailyForecastPoint | null;
-};
-
-export type TyphoonInfo = {
-  name: string;
-  country: string;
-  alertLevel: string;
-  distanceKm: number;
-  imageUrl: string | null;
-  reportUrl: string;
-  fromDate: string;
-  toDate: string;
-};
-
-export type EarthquakeInfo = {
-  time: string;
-  locationJa: string;
-  locationEn: string;
-  magnitude: number | null;
-  maxIntensity: string;
-  distanceKm: number;
 };
 
 export type MonthlyNormals = {
@@ -249,6 +228,13 @@ const NORMALS_YEARS = 10;
 const NORMALS_CACHE_PREFIX = "liveboard-weather-monthly-normals:";
 const NORMALS_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Request timed out")), ms)),
+  ]);
+}
+
 // Monthly climate normals from Open-Meteo's ERA5 archive: the mean daily temperature of each
 // calendar month averaged over the last NORMALS_YEARS *complete* years. Only whole past years
 // count — ERA5 lags a few days behind today, and a partial current year would drag a month's
@@ -332,146 +318,4 @@ export function monthlyNormalsFromFile(location: string): MonthlyNormals | null 
   }
   if (byMonth.every((v) => v == null)) return null;
   return { byMonth, startYear, endYear, source: "Wolfram|Alpha" };
-}
-
-function haversineKm(a: Coords, b: Coords): number {
-  const R = 6371;
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const dLon = ((b.lon - a.lon) * Math.PI) / 180;
-  const lat1 = (a.lat * Math.PI) / 180;
-  const lat2 = (b.lat * Math.PI) / 180;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-
-type GdacsFeature = {
-  geometry: { type: string; coordinates: [number, number] };
-  properties: {
-    name: string;
-    country: string;
-    alertlevel: string;
-    iscurrent: string;
-    fromdate: string;
-    todate: string;
-    icon: string;
-    url: { report: string; details: string };
-  };
-};
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Request timed out")), ms)),
-  ]);
-}
-
-// GDACS event list has no image; the per-event detail endpoint does (see `images.overviewmap`),
-// so only fetch it once a nearby storm is actually found. GDACS responds noticeably slower than
-// Open-Meteo (several seconds), so this is always run independently of the core weather fetch —
-// never awaited alongside it — and bounded by a timeout so a slow/hung request can't hang forever.
-export async function findNearbyTyphoon(coords: Coords, radiusKm: number): Promise<TyphoonInfo | null> {
-  const res = await withTimeout(fetch("https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=TC"), 15000);
-  if (!res.ok) throw new Error(`Typhoon fetch failed: HTTP ${res.status}`);
-  const data = (await res.json()) as { features?: GdacsFeature[] };
-
-  let nearest: { feature: GdacsFeature; distanceKm: number } | null = null;
-  for (const feature of data.features ?? []) {
-    if (feature.properties.iscurrent !== "true") continue;
-    if (feature.geometry.type !== "Point") continue;
-    const [lon, lat] = feature.geometry.coordinates;
-    const distanceKm = haversineKm(coords, { lat, lon });
-    if (distanceKm > radiusKm) continue;
-    if (!nearest || distanceKm < nearest.distanceKm) nearest = { feature, distanceKm };
-  }
-  if (!nearest) return null;
-
-  let imageUrl: string | null = nearest.feature.properties.icon ?? null;
-  try {
-    const detailRes = await withTimeout(fetch(nearest.feature.properties.url.details), 15000);
-    if (detailRes.ok) {
-      const detail = (await detailRes.json()) as { properties?: { images?: { overviewmap?: string } } };
-      if (detail.properties?.images?.overviewmap) imageUrl = detail.properties.images.overviewmap;
-    }
-  } catch {
-    // fall back to the alert-level icon already assigned above
-  }
-
-  const { properties } = nearest.feature;
-  return {
-    name: properties.name,
-    country: properties.country,
-    alertLevel: properties.alertlevel,
-    distanceKm: Math.round(nearest.distanceKm),
-    imageUrl,
-    reportUrl: properties.url.report,
-    fromDate: properties.fromdate,
-    toDate: properties.todate,
-  };
-}
-
-type JmaBulletin = {
-  eid: string;
-  at: string;
-  anm: string;
-  en_anm?: string;
-  cod: string;
-  mag: string;
-  maxi: string;
-};
-
-// JMA reports each earthquake in stages under the same eid — a quick intensity-only
-// bulletin (maxi, no location yet) followed later by a hypocenter bulletin (location,
-// magnitude, but sometimes no maxi). Merge bulletins per eid to get the full picture.
-function consolidateJmaEvents(bulletins: JmaBulletin[]): JmaBulletin[] {
-  const byEid = new Map<string, JmaBulletin>();
-  for (const b of bulletins) {
-    const existing = byEid.get(b.eid);
-    if (!existing) {
-      byEid.set(b.eid, { ...b });
-      continue;
-    }
-    if (!existing.anm && b.anm) existing.anm = b.anm;
-    if (!existing.en_anm && b.en_anm) existing.en_anm = b.en_anm;
-    if (!existing.cod && b.cod) existing.cod = b.cod;
-    if (!existing.mag && b.mag) existing.mag = b.mag;
-    if (!existing.maxi && b.maxi) existing.maxi = b.maxi;
-  }
-  return [...byEid.values()];
-}
-
-function parseJmaCoord(cod: string): Coords | null {
-  const match = cod.match(/^([+-][\d.]+)([+-][\d.]+)/);
-  if (!match) return null;
-  return { lat: Number(match[1]), lon: Number(match[2]) };
-}
-
-// JMA (Japan Meteorological Agency) publishes this list directly for browser use — it sets
-// Access-Control-Allow-Origin: *, so unlike Wolfram it needs no server-side proxy. Yahoo!
-// JAPAN's earthquake page has no public API of its own; it (like every Japanese weather
-// site) ultimately sources this same JMA data, so we go straight to JMA instead of scraping.
-export async function findRecentEarthquakes(coords: Coords, radiusKm: number, withinHours: number): Promise<EarthquakeInfo[]> {
-  const res = await withTimeout(fetch("https://www.jma.go.jp/bosai/quake/data/list.json"), 15000);
-  if (!res.ok) throw new Error(`Earthquake fetch failed: HTTP ${res.status}`);
-  const bulletins = (await res.json()) as JmaBulletin[];
-  const cutoff = Date.now() - withinHours * 60 * 60 * 1000;
-
-  const results: EarthquakeInfo[] = [];
-  for (const event of consolidateJmaEvents(bulletins)) {
-    if (!event.maxi) continue; // no measured intensity — not felt anywhere, skip
-    const originMs = new Date(event.at).getTime();
-    if (Number.isNaN(originMs) || originMs < cutoff) continue;
-    const epicenter = parseJmaCoord(event.cod);
-    if (!epicenter) continue;
-    const distanceKm = haversineKm(coords, epicenter);
-    if (distanceKm > radiusKm) continue;
-    results.push({
-      time: event.at,
-      locationJa: event.anm,
-      locationEn: event.en_anm || event.anm,
-      magnitude: event.mag ? Number(event.mag) : null,
-      maxIntensity: event.maxi,
-      distanceKm: Math.round(distanceKm),
-    });
-  }
-  return results.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
 }
