@@ -30,7 +30,8 @@ function formatMonth(monthIndex: number, lang: Lang): string {
   });
 }
 
-const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
+// How often the current conditions are re-fetched, when the config doesn't say (comp.refreshMinutes).
+const DEFAULT_REFRESH_MINUTES = 15;
 
 // Location box: how many candidates the dropdown lists, how long typing has to settle before
 // asking the geocoder, and the shortest query worth asking about at all.
@@ -125,9 +126,14 @@ function WeatherIconGlyph({ icon }: { icon: WeatherIcon }) {
 }
 
 export default function Weather({ config }: { config: Record<string, unknown> }) {
-  const comp = config.comp as { location?: string } | undefined;
+  const comp = config.comp as { location?: string; refreshMinutes?: number } | undefined;
   const save = config._save as ((comp: Record<string, unknown>) => void) | undefined;
   const configuredLocation = (comp?.location ?? "").trim();
+  // A non-positive or nonsensical value turns auto refresh off rather than spinning a runaway timer.
+  const refreshMinutes =
+    typeof comp?.refreshMinutes === "number" && Number.isFinite(comp.refreshMinutes)
+      ? Math.max(0, comp.refreshMinutes)
+      : DEFAULT_REFRESH_MINUTES;
   const lang = useLang();
 
   // `location` is what the weather is fetched for; `query` is what is currently typed in the box.
@@ -273,18 +279,29 @@ export default function Weather({ config }: { config: Record<string, unknown> })
       }
     })();
 
+    return () => {
+      cancelled = true;
+    };
+  }, [location, reloadKey]);
+
+  // Auto refresh of the current conditions, on its own effect so that editing the interval only
+  // rebuilds the timer instead of re-running the load above (geocode + monthly baseline).
+  useEffect(() => {
+    if (!location || refreshMinutes <= 0) return;
+    let cancelled = false;
+
     const id = setInterval(() => {
       geocodeLocation(location)
         .then((geo) => fetchCurrentWeather({ lat: geo.lat, lon: geo.lon }, geo.timezone))
         .then((current) => { if (!cancelled) setWeather(current); })
         .catch(() => undefined);
-    }, REFRESH_INTERVAL_MS);
+    }, refreshMinutes * 60 * 1000);
 
     return () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [location, reloadKey]);
+  }, [location, reloadKey, refreshMinutes]);
 
   // The box stays on screen in every state — a wrong or unknown location has to be fixable without
   // opening the config editor.

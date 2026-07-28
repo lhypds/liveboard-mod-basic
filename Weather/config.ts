@@ -25,11 +25,13 @@ export const config = {
   x: 0,
   y: 0,
   w: 18,
-  h: 22,
+  h: 23,
   minW: 12,
   minH: 14,
   allowMultipleInstances: true,
   comp: {
     location: "Tokyo",
+    // Auto refresh interval in minutes. 0 = no auto refresh.
+    refreshMinutes: 15,
   },
 };
