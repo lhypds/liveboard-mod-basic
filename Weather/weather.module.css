@@ -83,10 +83,35 @@
   flex-direction: column;
 }
 
+.temperatureRow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
 .temperature {
   font-size: 28px;
   font-weight: 500;
   line-height: 1.1;
+}
+
+/* Day-over-day delta beside the current temperature. The sign carries the same meaning as the
+   colour, so the reading survives PNG export, greyscale printing and colour-blind viewers. */
+.yesterdayDelta {
+  font-size: 18px;
+  font-weight: 400;
+  /* Same proportional line box as .temperature, so the first baseline lands in the same place by
+     construction instead of depending on how each engine resolves `normal` half-leading. */
+  line-height: 1.1;
+  align-self: baseline;
+}
+
+.warmerThanYesterday {
+  color: #a16207;
+}
+
+.colderThanYesterday {
+  color: #1d4ed8;
 }
 
 .condition {

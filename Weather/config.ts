@@ -16,8 +16,12 @@ export const config = {
           value: { en: "GDACS", ja: "GDACS", zh: "GDACS" },
         },
         {
-          key: { en: "Annual Mean Temperature", ja: "年間平均気温", zh: "年平均气温" },
-          value: { en: "Wolfram|Alpha", ja: "Wolfram|Alpha", zh: "Wolfram|Alpha" },
+          key: { en: "Monthly Mean Temperature", ja: "月別平年気温", zh: "月平均气温" },
+          value: {
+            en: "Wolfram|Alpha (10 yr), Open-Meteo Archive fallback",
+            ja: "Wolfram|Alpha（10年）、予備: Open-Meteo Archive",
+            zh: "Wolfram|Alpha（10年），备用 Open-Meteo Archive",
+          },
         },
         {
           key: { en: "Earthquake Info", ja: "地震情報", zh: "地震信息" },

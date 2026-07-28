@@ -5,11 +5,12 @@ import {
   fetchCurrentWeather,
   findNearbyTyphoon,
   findRecentEarthquakes,
-  fetchAnnualMeanTemp,
-  toCelsius,
+  fetchMonthlyNormals,
+  monthlyNormalsFromFile,
   type CurrentWeather,
   type TyphoonInfo,
   type EarthquakeInfo,
+  type MonthlyNormals,
 } from "./api";
 import { describeWeatherCode, type WeatherIcon, type Lang } from "./weatherCodes";
 import styles from "./weather.module.css";
@@ -19,6 +20,14 @@ const LOCALE: Record<Lang, string> = { en: "en-US", ja: "ja-JP", zh: "zh-CN" };
 function formatWeekday(dateStr: string, lang: Lang): string {
   const [y, m, d] = dateStr.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString(LOCALE[lang], { weekday: "short" });
+}
+
+// "July" in English, "7月" in Japanese/Chinese — the numeric form reads better in CJK than
+// zh-CN's long form ("七月"), and ja/zh render "7月" for numeric anyway.
+function formatMonth(monthIndex: number, lang: Lang): string {
+  return new Date(2000, monthIndex, 1).toLocaleDateString(LOCALE[lang], {
+    month: lang === "en" ? "long" : "numeric",
+  });
 }
 
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
@@ -40,7 +49,11 @@ const STRINGS: Record<string, Record<Lang, string>> = {
   next24h: { en: "Next 24 hours", ja: "今後24時間", zh: "未来24小时" },
   now: { en: "Now", ja: "現在", zh: "现在" },
   upcomingDays: { en: "Next 2 days", ja: "今後2日間", zh: "未来2天" },
-  vsAverage: { en: "vs. yearly average", ja: "年間平均比", zh: "较年平均" },
+  vsMonthAverage: { en: "vs. {month} average", ja: "{month}平均比", zh: "较{month}平均" },
+  monthAverage: { en: "{month} average", ja: "{month}平均気温", zh: "{month}平均气温" },
+  todayMean: { en: "Today's mean", ja: "本日の平均気温", zh: "今日日均温" },
+  vsYesterday: { en: "vs. yesterday", ja: "前日比", zh: "较昨日" },
+  yesterdayMean: { en: "Yesterday's mean", ja: "前日の平均気温", zh: "昨日日均温" },
   warmer: { en: "warmer", ja: "高い", zh: "偏暖" },
   colder: { en: "colder", ja: "低い", zh: "偏冷" },
 };
@@ -116,7 +129,7 @@ export default function Weather({ config }: { config: Record<string, unknown> })
   const [weather, setWeather] = useState<CurrentWeather | null>(null);
   const [typhoon, setTyphoon] = useState<TyphoonInfo | null>(null);
   const [earthquakes, setEarthquakes] = useState<EarthquakeInfo[]>([]);
-  const [annualAvgC, setAnnualAvgC] = useState<number | null>(null);
+  const [normals, setNormals] = useState<MonthlyNormals | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   useEffect(() => {
@@ -144,13 +157,28 @@ export default function Weather({ config }: { config: Record<string, unknown> })
         findRecentEarthquakes({ lat: geo.lat, lon: geo.lon }, earthquakeRadiusKm, EARTHQUAKE_WITHIN_HOURS)
           .then((quakes) => { if (!cancelled) setEarthquakes(quakes); })
           .catch(() => { if (!cancelled) setEarthquakes([]); });
+
+        // Wolfram's prebuilt baseline (refresh.sh → data/monthly-mean-temp.json) is preferred: it
+        // costs no request at all. The live archive only fills in when this location isn't in
+        // location.txt, or its current month has too few years on record — ten years of daily data
+        // is a slow, chunky request, so it is never awaited alongside the core weather fetch, and
+        // the card simply omits the comparison line if it fails.
+        const monthIndex = Number(current.time.slice(5, 7)) - 1;
+        const fromFile = monthlyNormalsFromFile(location);
+        if (fromFile?.byMonth[monthIndex] != null) {
+          setNormals(fromFile);
+        } else {
+          // Drop any baseline left over from a previously configured location, so the new
+          // temperature is never briefly paired with the old place's monthly average.
+          setNormals(null);
+          fetchMonthlyNormals({ lat: geo.lat, lon: geo.lon }, geo.timezone)
+            .then((data) => { if (!cancelled) setNormals(data); })
+            .catch(() => { if (!cancelled) setNormals(null); });
+        }
       } catch {
         if (!cancelled) setStatus("error");
       }
     })();
-
-    const avg = fetchAnnualMeanTemp(location);
-    setAnnualAvgC(avg ? toCelsius(avg) : null);
 
     const id = setInterval(() => {
       geocodeLocation(location)
@@ -190,7 +218,22 @@ export default function Weather({ config }: { config: Record<string, unknown> })
   }
 
   const code = describeWeatherCode(weather.weatherCode);
-  const diffFromAverage = annualAvgC != null ? weather.temperature - annualAvgC : null;
+  // Compare like with like: today's daily mean against the same month's mean over the last decade,
+  // so the reading says "warm for July" instead of the useless "warm for the year" a yearly
+  // baseline gives every summer. The month comes from the location's own date, not the viewer's.
+  const monthIndex = Number(weather.time.slice(5, 7)) - 1;
+  const monthNormalC = normals?.byMonth[monthIndex] ?? null;
+  const todayMeanC = (weather.todayMax + weather.todayMin) / 2;
+  const diffFromMonth = monthNormalC != null ? todayMeanC - monthNormalC : null;
+  const monthName = formatMonth(monthIndex, lang);
+
+  // Day-over-day, again mean vs mean. Anything under 0.05°C rounds to "0.0" and is reported as
+  // flat rather than given a warmer/colder colour it hasn't earned.
+  const yesterdayMeanC = weather.yesterday ? (weather.yesterday.tempMax + weather.yesterday.tempMin) / 2 : null;
+  const diffFromYesterday = yesterdayMeanC != null ? todayMeanC - yesterdayMeanC : null;
+  const yesterdayTrend =
+    diffFromYesterday == null ? null : diffFromYesterday >= 0.05 ? "up" : diffFromYesterday <= -0.05 ? "down" : "flat";
+  const YESTERDAY_STYLE = { up: styles.warmerThanYesterday, down: styles.colderThanYesterday, flat: "" } as const;
 
   return (
     <div className={styles.container}>
@@ -220,7 +263,24 @@ export default function Weather({ config }: { config: Record<string, unknown> })
       <div className={styles.header}>
         <WeatherIconGlyph icon={code.icon} />
         <div className={styles.headerText}>
-          <div className={styles.temperature}>{Math.round(weather.temperature)}°C</div>
+          <div className={styles.temperatureRow}>
+            <div className={styles.temperature}>{Math.round(weather.temperature)}°C</div>
+            {yesterdayTrend != null && diffFromYesterday != null && yesterdayMeanC != null && (
+              <span
+                className={`${styles.yesterdayDelta} ${YESTERDAY_STYLE[yesterdayTrend]}`}
+                // The bare number carries no label next to the temperature, so the tooltip spells
+                // out what it is measured against.
+                title={
+                  `${STRINGS.vsYesterday[lang]} · ${STRINGS.todayMean[lang]} ${todayMeanC.toFixed(1)}°C · ` +
+                  `${STRINGS.yesterdayMean[lang]} ${yesterdayMeanC.toFixed(1)}°C`
+                }
+              >
+                {yesterdayTrend === "flat"
+                  ? "±0.0°C"
+                  : `${diffFromYesterday >= 0 ? "+" : ""}${diffFromYesterday.toFixed(1)}°C`}
+              </span>
+            )}
+          </div>
           <div className={styles.condition}>{code.label[lang]}</div>
         </div>
       </div>
@@ -284,10 +344,18 @@ export default function Weather({ config }: { config: Record<string, unknown> })
         </div>
       )}
 
-      {diffFromAverage != null && (
-        <div className={styles.average}>
-          {diffFromAverage >= 0 ? "+" : ""}
-          {diffFromAverage.toFixed(1)}°C {diffFromAverage >= 0 ? STRINGS.warmer[lang] : STRINGS.colder[lang]} ({STRINGS.vsAverage[lang]})
+      {diffFromMonth != null && monthNormalC != null && normals != null && (
+        <div
+          className={styles.average}
+          title={
+            `${STRINGS.todayMean[lang]} ${todayMeanC.toFixed(1)}°C · ` +
+            `${STRINGS.monthAverage[lang].replace("{month}", monthName)} ${monthNormalC.toFixed(1)}°C ` +
+            `(${normals.startYear}–${normals.endYear}, ${normals.source})`
+          }
+        >
+          {diffFromMonth >= 0 ? "+" : ""}
+          {diffFromMonth.toFixed(1)}°C {diffFromMonth >= 0 ? STRINGS.warmer[lang] : STRINGS.colder[lang]} (
+          {STRINGS.vsMonthAverage[lang].replace("{month}", monthName)})
         </div>
       )}
     </div>
