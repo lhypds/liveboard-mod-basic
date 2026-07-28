@@ -308,7 +308,9 @@ export default function Weather({ config }: { config: Record<string, unknown> })
   const locationField = (
     <div className={styles.locationRow}>
       <span className={styles.locationLabel}>{STRINGS.locationLabel[lang]}:</span>
-      <div className={styles.locationField}>
+      {/* data-value feeds the CSS mirror that sizes the field to its contents; an empty box falls
+          back to the placeholder so it stays wide enough to read. */}
+      <div className={styles.locationField} data-value={query || STRINGS.locationPlaceholder[lang]}>
         <input
           ref={inputRef}
           type="text"
@@ -317,6 +319,9 @@ export default function Weather({ config }: { config: Record<string, unknown> })
           placeholder={STRINGS.locationPlaceholder[lang]}
           aria-label={STRINGS.locationLabel[lang]}
           autoComplete="off"
+          // Collapses the input's intrinsic width so the mirror above decides how wide the grid
+          // column is; the CSS stretches it back to fill.
+          size={1}
           onChange={(e) => {
             setQuery(e.target.value);
             setOpen(true);

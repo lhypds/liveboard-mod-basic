@@ -89,22 +89,47 @@
 }
 
 /* Anchor for the dropdown, which is absolute so it overlays the card instead of pushing it around.
-   Sized to a city name rather than stretched across the card — city names are short, and the row
-   reads as a label with a value instead of as a form. */
+   Width comes from the ::after mirror below rather than a fixed basis, so the underline tracks the
+   text (plus a 4px overhang each side) and the row reads as a label with a value, not as a form. */
 .locationField {
   position: relative;
-  flex: 0 1 80px;
+  display: inline-grid;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
+}
+
+/* Invisible copy of what is in the box, sharing the input's grid cell so the column sizes to the
+   text's real rendered width — the `size` attribute can't do this in a proportional font, where a
+   "Wellington" is far wider than the same count of "l"s. attr() only reads attributes, hence the
+   data-value the component mirrors onto this wrapper. */
+.locationField::after {
+  content: attr(data-value);
+  grid-area: 1 / 1;
+  font: inherit;
+  white-space: pre;
+  visibility: hidden;
+  /* Must match .locationInput's side padding, or the mirror and the box it is sizing disagree */
+  padding: 0 4px;
 }
 
 .locationInput {
+  grid-area: 1 / 1;
   width: 100%;
+  /* Without this the input's default ~20-character intrinsic width would set the column and the
+     mirror would never get a say */
+  min-width: 0;
   box-sizing: border-box;
-  border: 1px solid black;
-  background: white;
+  border: none;
+  /* Same grey as .locationRow's text, so the rule reads as part of the label row rather than as a
+     hard form edge like the card's black borders */
+  border-bottom: 1px solid #6b7280;
+  background: transparent;
   color: #0f172a;
   font: inherit;
-  padding: 2px 6px;
+  /* The 4px sides are what makes the rule overhang the text; .locationField::after carries the same
+     padding so the column is text + 8px wide */
+  padding: 2px 4px;
   outline: none;
 }
 
