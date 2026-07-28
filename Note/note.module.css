@@ -1,8 +1,9 @@
 .container {
-  height: 100%;
+  box-sizing: border-box;
+  width: calc(100% + 10px);
+  height: calc(100% + 10px);
   display: flex;
   flex-direction: column;
-  padding-bottom: 3px;
 }
 
 /* TextArea wrapper — fill remaining card height */
