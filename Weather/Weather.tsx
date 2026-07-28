@@ -1,12 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   geocodeLocation,
+  searchLocations,
+  primeGeocodeCache,
+  LocationNotFoundError,
   fetchCurrentWeather,
   findNearbyTyphoon,
   findRecentEarthquakes,
   fetchMonthlyNormals,
   monthlyNormalsFromFile,
+  type GeocodeResult,
   type CurrentWeather,
   type TyphoonInfo,
   type EarthquakeInfo,
@@ -33,10 +37,21 @@ function formatMonth(monthIndex: number, lang: Lang): string {
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 const EARTHQUAKE_WITHIN_HOURS = 24;
 
+// Location box: how many candidates the dropdown lists, how long typing has to settle before
+// asking the geocoder, and the shortest query worth asking about at all.
+const SUGGESTION_COUNT = 6;
+const SEARCH_DEBOUNCE_MS = 250;
+const MIN_QUERY_LENGTH = 2;
+
 const STRINGS: Record<string, Record<Lang, string>> = {
   noLocation: { en: "No location configured.", ja: "地点が設定されていません。", zh: "尚未设置地点。" },
   loading: { en: "Loading weather…", ja: "天気を読み込み中…", zh: "正在加载天气…" },
   error: { en: "Failed to load weather.", ja: "天気の取得に失敗しました。", zh: "天气加载失败。" },
+  locationLabel: { en: "Location", ja: "地点", zh: "地点" },
+  locationPlaceholder: { en: "Enter a city…", ja: "都市名を入力…", zh: "输入城市…" },
+  searching: { en: "Searching…", ja: "検索中…", zh: "搜索中…" },
+  noMatches: { en: "No matching place", ja: "候補が見つかりません", zh: "没有匹配的地点" },
+  notFound: { en: "Location not found.", ja: "地点が見つかりません。", zh: "未找到该地点。" },
   feelsLike: { en: "Feels like", ja: "体感", zh: "体感" },
   humidity: { en: "Humidity", ja: "湿度", zh: "湿度" },
   wind: { en: "Wind", ja: "風速", zh: "风速" },
@@ -120,17 +135,115 @@ function WeatherIconGlyph({ icon }: { icon: WeatherIcon }) {
 
 export default function Weather({ config }: { config: Record<string, unknown> }) {
   const comp = config.comp as { location?: string; typhoonRadiusKm?: number; earthquakeRadiusKm?: number } | undefined;
-  const location = (comp?.location ?? "").trim();
+  const save = config._save as ((comp: Record<string, unknown>) => void) | undefined;
+  const configuredLocation = (comp?.location ?? "").trim();
   const typhoonRadiusKm = typeof comp?.typhoonRadiusKm === "number" ? comp.typhoonRadiusKm : 800;
   const earthquakeRadiusKm = typeof comp?.earthquakeRadiusKm === "number" ? comp.earthquakeRadiusKm : 300;
   const lang = useLang();
 
+  // `location` is what the weather is fetched for; `query` is what is currently typed in the box.
+  // Keeping them apart means a half-typed city name never triggers a fetch — only committing does.
+  const [location, setLocation] = useState(configuredLocation);
+  const [query, setQuery] = useState(configuredLocation);
+  // Candidates are stored together with the query they answer, so results arriving for a query the
+  // user has already typed past are simply ignored instead of briefly replacing the current list.
+  const [suggested, setSuggested] = useState<{ query: string; results: GeocodeResult[] } | null>(null);
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const trimmedQuery = query.trim();
+  const suggestions = suggested?.query === trimmedQuery ? suggested.results : null;
+  const showDropdown = open && trimmedQuery.length >= MIN_QUERY_LENGTH;
+  // A shrinking result list must not leave the highlight pointing past its end.
+  const activeIndex = suggestions && highlight < suggestions.length ? highlight : -1;
+
   const [placeName, setPlaceName] = useState("");
+  // Bumped to force a reload when the location name stayed the same but the place behind it changed.
+  const [reloadKey, setReloadKey] = useState(0);
+  const geoRef = useRef<GeocodeResult | null>(null);
   const [weather, setWeather] = useState<CurrentWeather | null>(null);
   const [typhoon, setTyphoon] = useState<TyphoonInfo | null>(null);
   const [earthquakes, setEarthquakes] = useState<EarthquakeInfo[]>([]);
   const [normals, setNormals] = useState<MonthlyNormals | null>(null);
-  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error" | "notFound">("idle");
+
+  // Mirrors `location`, for the two reads that can't use it: recognising a change that came from
+  // outside this card, and the blur handler, which runs before React re-renders after a commit and
+  // would otherwise put the previous location back into the box.
+  const locationRef = useRef(configuredLocation);
+
+  // Follow the location when it changes from outside the card (config editor, layout import),
+  // without clobbering what the user is typing here.
+  useEffect(() => {
+    if (configuredLocation !== locationRef.current) {
+      locationRef.current = configuredLocation;
+      setLocation(configuredLocation);
+      setQuery(configuredLocation);
+    }
+  }, [configuredLocation]);
+
+  function commitLocation(next: string, picked?: GeocodeResult) {
+    const trimmed = next.trim();
+    setQuery(trimmed);
+    setOpen(false);
+    setHighlight(-1);
+    if (picked) primeGeocodeCache(trimmed, picked);
+    if (trimmed === location) {
+      // Same name, different place — two "Springfield"s, say. The name in the config doesn't change,
+      // so nothing above triggers a reload; this does.
+      if (picked && geoRef.current && (picked.lat !== geoRef.current.lat || picked.lon !== geoRef.current.lon)) {
+        setReloadKey((n) => n + 1);
+      }
+      return;
+    }
+    locationRef.current = trimmed;
+    setLocation(trimmed);
+    save?.({ ...comp, location: trimmed });
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      const count = suggestions?.length ?? 0;
+      if (!count) return;
+      e.preventDefault();
+      setOpen(true);
+      const down = e.key === "ArrowDown";
+      setHighlight((prev) => (prev < 0 ? (down ? 0 : count - 1) : (prev + (down ? 1 : -1) + count) % count));
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const picked = activeIndex >= 0 ? suggestions?.[activeIndex] : undefined;
+      commitLocation(picked ? picked.name : query, picked);
+      inputRef.current?.blur();
+      return;
+    }
+    if (e.key === "Escape") {
+      // Abandon the edit: the box goes back to the location actually being shown.
+      setQuery(locationRef.current);
+      setOpen(false);
+      setHighlight(-1);
+      inputRef.current?.blur();
+    }
+  }
+
+  // Fetch candidates for the dropdown while typing, debounced so a fast typist causes one request
+  // instead of one per keystroke.
+  useEffect(() => {
+    if (!showDropdown) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      searchLocations(trimmedQuery, SUGGESTION_COUNT)
+        .then((results) => { if (!cancelled) setSuggested({ query: trimmedQuery, results }); })
+        .catch(() => { if (!cancelled) setSuggested({ query: trimmedQuery, results: [] }); });
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [trimmedQuery, showDropdown]);
 
   useEffect(() => {
     if (!location) {
@@ -144,6 +257,7 @@ export default function Weather({ config }: { config: Record<string, unknown> })
       try {
         const geo = await geocodeLocation(location);
         if (cancelled) return;
+        geoRef.current = geo;
         setPlaceName(geo.name);
         const current = await fetchCurrentWeather({ lat: geo.lat, lon: geo.lon }, geo.timezone);
         if (cancelled) return;
@@ -175,8 +289,8 @@ export default function Weather({ config }: { config: Record<string, unknown> })
             .then((data) => { if (!cancelled) setNormals(data); })
             .catch(() => { if (!cancelled) setNormals(null); });
         }
-      } catch {
-        if (!cancelled) setStatus("error");
+      } catch (err) {
+        if (!cancelled) setStatus(err instanceof LocationNotFoundError ? "notFound" : "error");
       }
     })();
 
@@ -191,28 +305,83 @@ export default function Weather({ config }: { config: Record<string, unknown> })
       cancelled = true;
       clearInterval(id);
     };
-  }, [location, typhoonRadiusKm, earthquakeRadiusKm]);
+  }, [location, reloadKey, typhoonRadiusKm, earthquakeRadiusKm]);
 
-  if (!location) {
-    return (
-      <div className={styles.placeholder}>
-        <span className={styles.hint}>{STRINGS.noLocation[lang]}</span>
+  // The box stays on screen in every state — a wrong or unknown location has to be fixable without
+  // opening the config editor.
+  const locationField = (
+    <div className={styles.locationRow}>
+      <span className={styles.locationLabel}>{STRINGS.locationLabel[lang]}:</span>
+      <div className={styles.locationField}>
+        <input
+          ref={inputRef}
+          type="text"
+          className={styles.locationInput}
+          value={query}
+          placeholder={STRINGS.locationPlaceholder[lang]}
+          aria-label={STRINGS.locationLabel[lang]}
+          autoComplete="off"
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+            setHighlight(-1);
+          }}
+          onFocus={() => setOpen(true)}
+          // Leaving the box without picking anything isn't a change — put back what is on screen.
+          onBlur={() => {
+            setQuery(locationRef.current);
+            setOpen(false);
+            setHighlight(-1);
+          }}
+          onKeyDown={handleKeyDown}
+        />
+        {showDropdown && (
+          <ul className={styles.suggestions} role="listbox">
+            {(suggestions ?? []).map((place, i) => (
+              <li
+                key={place.id ?? `${place.name}-${place.lat}-${place.lon}`}
+                role="option"
+                aria-selected={i === activeIndex}
+                className={`${styles.suggestion} ${i === activeIndex ? styles.suggestionActive : ""}`}
+                // Keep the focus in the input, so onBlur can't reset the query before the click lands.
+                onMouseDown={(e) => e.preventDefault()}
+                onMouseEnter={() => setHighlight(i)}
+                onClick={() => commitLocation(place.name, place)}
+              >
+                <span className={styles.suggestionName}>{place.name}</span>
+                <span className={styles.suggestionMeta}>
+                  {[place.admin1, place.country].filter(Boolean).join(", ")}
+                </span>
+              </li>
+            ))}
+            {suggestions?.length === 0 && <li className={styles.suggestionEmpty}>{STRINGS.noMatches[lang]}</li>}
+            {suggestions === null && <li className={styles.suggestionEmpty}>{STRINGS.searching[lang]}</li>}
+          </ul>
+        )}
       </div>
-    );
-  }
+      {/* The geocoder resolves loose input ("tokio") to a real place; show it when it differs from
+          what was typed, so the card never silently reports some other city's weather. */}
+      {status === "ready" && placeName && placeName.toLowerCase() !== location.toLowerCase() && (
+        <span className={styles.resolvedPlace}>→ {placeName}</span>
+      )}
+    </div>
+  );
 
-  if (status === "loading" || status === "idle") {
-    return (
-      <div className={styles.placeholder}>
-        <span className={styles.hint}>{STRINGS.loading[lang]}</span>
-      </div>
-    );
-  }
+  const statusHint = !location
+    ? STRINGS.noLocation[lang]
+    : status === "notFound"
+      ? STRINGS.notFound[lang]
+      : status === "error"
+        ? STRINGS.error[lang]
+        : status === "loading" || status === "idle"
+          ? STRINGS.loading[lang]
+          : null;
 
-  if (status === "error" || !weather) {
+  if (statusHint !== null || !weather) {
     return (
-      <div className={styles.placeholder}>
-        <span className={styles.hint}>{STRINGS.error[lang]}</span>
+      <div className={styles.container}>
+        {locationField}
+        <span className={styles.hint}>{statusHint ?? STRINGS.error[lang]}</span>
       </div>
     );
   }
@@ -260,6 +429,8 @@ export default function Weather({ config }: { config: Record<string, unknown> })
         </div>
       )}
 
+      {locationField}
+
       <div className={styles.header}>
         <WeatherIconGlyph icon={code.icon} />
         <div className={styles.headerText}>
@@ -284,8 +455,6 @@ export default function Weather({ config }: { config: Record<string, unknown> })
           <div className={styles.condition}>{code.label[lang]}</div>
         </div>
       </div>
-
-      <div className={styles.place}>{placeName || location}</div>
 
       <div className={styles.details}>
         <div className={styles.detail}>

@@ -15,7 +15,21 @@ export type GeocodeResult = {
   name: string;
   country: string;
   timezone: string;
+  // Region within the country ("Tokyo", "California") — only used to tell same-named places apart
+  // in the location dropdown, so it is absent whenever the geocoder omits it.
+  admin1?: string;
+  // Open-Meteo's own place id, a stable React key for the dropdown.
+  id?: number;
 };
+
+// Thrown when the geocoder simply has no such place, as opposed to the network or the API failing —
+// the card shows "location not found" for this and a generic error for everything else.
+export class LocationNotFoundError extends Error {
+  constructor(query: string) {
+    super(`Location not found: ${query}`);
+    this.name = "LocationNotFoundError";
+  }
+}
 
 export type HourlyForecastPoint = {
   time: string;
@@ -100,31 +114,62 @@ function writeCache<T>(key: string, data: T) {
   }
 }
 
+type GeocodeApiPlace = {
+  id?: number;
+  latitude: number;
+  longitude: number;
+  name: string;
+  country?: string;
+  admin1?: string;
+  timezone: string;
+};
+
+function toGeocodeResult(place: GeocodeApiPlace): GeocodeResult {
+  return {
+    lat: place.latitude,
+    lon: place.longitude,
+    name: place.name,
+    country: place.country ?? "",
+    timezone: place.timezone,
+    admin1: place.admin1,
+    id: place.id,
+  };
+}
+
+async function searchGeocoder(query: string, count: number): Promise<GeocodeResult[]> {
+  const url = new URL("https://geocoding-api.open-meteo.com/v1/search");
+  url.searchParams.set("name", query);
+  url.searchParams.set("count", String(count));
+  url.searchParams.set("format", "json");
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Geocoding failed: HTTP ${res.status}`);
+  const data = (await res.json()) as { results?: GeocodeApiPlace[] };
+  return (data.results ?? []).map(toGeocodeResult);
+}
+
 export async function geocodeLocation(query: string): Promise<GeocodeResult> {
   const cacheKey = GEOCODE_CACHE_PREFIX + query.trim().toLowerCase();
   const cached = readCache<GeocodeResult>(cacheKey, GEOCODE_TTL_MS);
   if (cached) return cached;
 
-  const url = new URL("https://geocoding-api.open-meteo.com/v1/search");
-  url.searchParams.set("name", query);
-  url.searchParams.set("count", "1");
-  url.searchParams.set("format", "json");
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Geocoding failed: HTTP ${res.status}`);
-  const data = (await res.json()) as {
-    results?: Array<{ latitude: number; longitude: number; name: string; country?: string; timezone: string }>;
-  };
-  const first = data.results?.[0];
-  if (!first) throw new Error(`Location not found: ${query}`);
-  const result: GeocodeResult = {
-    lat: first.latitude,
-    lon: first.longitude,
-    name: first.name,
-    country: first.country ?? "",
-    timezone: first.timezone,
-  };
-  writeCache(cacheKey, result);
-  return result;
+  const first = (await searchGeocoder(query, 1))[0];
+  if (!first) throw new LocationNotFoundError(query);
+  writeCache(cacheKey, first);
+  return first;
+}
+
+// Candidates for the location dropdown. Deliberately uncached: the query changes on every
+// keystroke, so caching each partial word would only fill up localStorage.
+export async function searchLocations(query: string, count: number): Promise<GeocodeResult[]> {
+  return searchGeocoder(query, count);
+}
+
+// Store a picked dropdown entry under the key geocodeLocation() reads, so a name that matches
+// several places ("Springfield") resolves to the exact one the user chose rather than to whichever
+// the geocoder ranks first. Only the name is persisted in the config, so without this the
+// coordinates behind a pick would be lost on the next load.
+export function primeGeocodeCache(query: string, result: GeocodeResult) {
+  writeCache(GEOCODE_CACHE_PREFIX + query.trim().toLowerCase(), result);
 }
 
 export async function fetchCurrentWeather(coords: Coords, timezone: string): Promise<CurrentWeather> {

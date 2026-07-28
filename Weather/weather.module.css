@@ -13,13 +13,6 @@
   display: none;
 }
 
-.placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-}
-
 .hint {
   font-size: 12px;
   color: #6b7280;
@@ -107,7 +100,9 @@
 }
 
 .warmerThanYesterday {
-  color: #a16207;
+  /* Golden amber rather than the darker ochre it used to be: reads as warm instead of rust-red,
+     while staying above 4.5:1 on white so the 18px delta is still legible without leaning on colour. */
+  color: #a56c09;
 }
 
 .colderThanYesterday {
@@ -118,7 +113,96 @@
   color: #4b5563;
 }
 
-.place {
+.locationRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #6b7280;
+}
+
+.locationLabel {
+  flex-shrink: 0;
+}
+
+/* Anchor for the dropdown, which is absolute so it overlays the card instead of pushing it around.
+   Sized to a city name rather than stretched across the card — city names are short, and the row
+   reads as a label with a value instead of as a form. */
+.locationField {
+  position: relative;
+  flex: 0 1 80px;
+  min-width: 0;
+}
+
+.locationInput {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid black;
+  background: white;
+  color: #0f172a;
+  font: inherit;
+  padding: 2px 6px;
+  outline: none;
+}
+
+.resolvedPlace {
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Free to grow past the now-narrow input — "Kagoshima, Japan" needs more room than "Osaka" does —
+   but capped so it can't spill out of the card. */
+.suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: max-content;
+  min-width: 100%;
+  max-width: 260px;
+  z-index: 10;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid black;
+  background: white;
+}
+
+.suggestion {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px;
+  cursor: pointer;
+}
+
+.suggestionName {
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.suggestionMeta {
+  color: #6b7280;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestionActive {
+  background: black;
+}
+
+.suggestionActive .suggestionName,
+.suggestionActive .suggestionMeta {
+  color: white;
+}
+
+.suggestionEmpty {
+  padding: 4px 6px;
   color: #6b7280;
 }
 
