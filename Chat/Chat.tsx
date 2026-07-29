@@ -1,11 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BRIDGE_URL, connectSc, newSessionId, trailingPrompt, type ScClient, type ScState } from "./sc";
+import {
+  DEFAULT_BRIDGE_URL,
+  connectSc,
+  newSessionId,
+  normalizeBridgeUrl,
+  trailingPrompt,
+  type ScClient,
+  type ScState,
+} from "./sc";
 import styles from "./chat.module.css";
 
 type Lang = "en" | "ja" | "zh";
 
 type ChatComp = {
+  bridgeUrl?: string;
   bridgeSession?: string;
   scSession?: string;
   model?: string;
@@ -18,14 +27,14 @@ const DEFAULT_MAX_CHARS = 20000;
 const STRINGS: Record<string, Record<Lang, string>> = {
   starting: { en: "Starting sc…", ja: "sc を起動中…", zh: "正在启动 sc…" },
   unavailable: {
-    en: `No answer from the sc bridge at ${BRIDGE_URL}`,
-    ja: `sc ブリッジ (${BRIDGE_URL}) が応答しません`,
-    zh: `sc 桥接服务 (${BRIDGE_URL}) 无响应`,
+    en: "No answer from the sc bridge at {{url}}",
+    ja: "sc ブリッジ ({{url}}) が応答しません",
+    zh: "sc 桥接服务 ({{url}}) 无响应",
   },
   unconfigured: {
-    en: "VITE_SC_BRIDGE_URL is not set in this component's .env",
-    ja: "このコンポーネントの .env に VITE_SC_BRIDGE_URL が設定されていません",
-    zh: "本组件的 .env 中未设置 VITE_SC_BRIDGE_URL",
+    en: "No sc bridge set — put one in this card's config (bridgeUrl), or in VITE_SC_BRIDGE_URL",
+    ja: "sc ブリッジが未設定です — このカードの config (bridgeUrl) か VITE_SC_BRIDGE_URL に指定してください",
+    zh: "未设置 sc 桥接服务 —— 请在本卡片的 config (bridgeUrl) 或 VITE_SC_BRIDGE_URL 中填写",
   },
 };
 
@@ -47,6 +56,9 @@ export default function Chat({ config }: { config: Record<string, unknown> }) {
   const save = config._save as ((comp: Record<string, unknown>) => void) | undefined;
   const cardId = typeof config._id === "string" ? config._id : "";
 
+  // The bridge this card talks to: its own if it names one, the deployment's default otherwise.
+  const bridgeUrl = normalizeBridgeUrl(comp?.bridgeUrl) || DEFAULT_BRIDGE_URL;
+
   const maxChars = typeof comp?.maxChars === "number" ? comp.maxChars : DEFAULT_MAX_CHARS;
   // Keep the scrollback bounded, cutting at a line break so the top stays readable.
   const cap = (text: string) => {
@@ -67,10 +79,13 @@ export default function Chat({ config }: { config: Record<string, unknown> }) {
   // so it echoes nothing itself). Append-only — this is the scrollback.
   const [log, setLog] = useState(() => comp?.terminal ?? "");
   // Whether the CLI behind the card is usable yet. Anything but "live" covers the terminal
-  // with a message instead, so the box only ever holds the session itself.
-  const [phase, setPhase] = useState<"starting" | "live" | "unavailable" | "unconfigured">(
-    BRIDGE_URL ? "starting" : "unconfigured",
-  );
+  // with a message instead, so the box only ever holds the session itself. Stamped with the
+  // bridge it describes, so pointing the card elsewhere is back to "starting" on its own.
+  const [conn, setConn] = useState<{ url: string; state: "starting" | "live" | "unavailable" }>({
+    url: bridgeUrl,
+    state: "starting",
+  });
+  const phase = !bridgeUrl ? "unconfigured" : conn.url === bridgeUrl ? conn.state : "starting";
   // The line being typed, i.e. everything after the prompt.
   const [draft, setDraft] = useState("");
   const [state, setState] = useState<ScState>(() => ({
@@ -103,27 +118,28 @@ export default function Chat({ config }: { config: Record<string, unknown> }) {
   const attachedRef = useRef(false);
 
   useEffect(() => {
-    if (!BRIDGE_URL) return;
+    if (!bridgeUrl) return;
     attachedRef.current = false;
+    const mark = (state: "live" | "unavailable") => setConn({ url: bridgeUrl, state });
 
-    const client = connectSc(bridgeSession, {
+    const client = connectSc(bridgeUrl, bridgeSession, {
       // Straight into the scrollback, banner and prompt included, exactly as the CLI
       // printed it — the card is a view of the terminal, not a chat transcript. Notices
       // about the bridge itself stay out of it; they belong to the card, not the session.
       onChunk: (text) => {
-        setPhase("live");
+        mark("live");
         append(text);
         const prompt = trailingPrompt(text);
         if (prompt) promptRef.current = prompt;
       },
       onReady: () => {
         generatingRef.current = false;
-        setPhase("live");
+        mark("live");
       },
       // The CLI answered `:info`, which is proof it is up — and on a reconnect that answer is
       // the only proof coming, since the banner went to the page that has since been reloaded.
       onState: (next) => {
-        setPhase("live");
+        mark("live");
 
         const wanted = wantedScSessionRef.current;
         if (wanted && next.scSession && next.scSession !== wanted && !attachedRef.current) {
@@ -139,7 +155,7 @@ export default function Chat({ config }: { config: Record<string, unknown> }) {
         // type at — the one the CLI printed went to the page that has since been reloaded.
         if (next.model) setLog((prev) => prev || `${next.model}> `);
       },
-      onUnavailable: () => setPhase("unavailable"),
+      onUnavailable: () => mark("unavailable"),
     });
     clientRef.current = client;
 
@@ -150,7 +166,7 @@ export default function Chat({ config }: { config: Record<string, unknown> }) {
     // `append` is re-made every render but only ever calls setLog, so re-subscribing the
     // stream on its identity would restart the CLI's output for nothing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bridgeSession]);
+  }, [bridgeSession, bridgeUrl]);
 
   // Persist everything the card needs to come back as it is now.
   useEffect(() => {
@@ -293,7 +309,7 @@ export default function Chat({ config }: { config: Record<string, unknown> }) {
       />
       {phase !== "live" && (
         <div className={styles.notice}>
-          <span>{STRINGS[phase][lang]}</span>
+          <span>{STRINGS[phase][lang].replace("{{url}}", bridgeUrl)}</span>
         </div>
       )}
     </div>

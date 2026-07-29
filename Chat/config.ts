@@ -33,6 +33,9 @@ export const config = {
   minH: 12,
   allowMultipleInstances: true,
   comp: {
+    // The sc bridge this card talks to. Empty uses the board's default, VITE_SC_BRIDGE_URL
+    // (see .env.example) — set it here to point one card at a bridge of your own.
+    bridgeUrl: "",
     // Which `sc` process on the bridge this card owns. Generated on first use.
     bridgeSession: "",
     // The simple-ai session id — the conversation itself. Kept so a restarted CLI

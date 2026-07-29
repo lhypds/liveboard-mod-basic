@@ -1,7 +1,7 @@
 // Client for the sc bridge — a small server that runs the `sc` (simple-ai-chat) CLI and
-// exposes its stdin/stdout over HTTP, since a browser cannot spawn a CLI itself. The bridge
-// is not part of this board: it runs elsewhere and this card only talks to it, at the URL in
-// VITE_SC_BRIDGE_URL (see .env.example).
+// exposes its stdin/stdout over HTTP, since a browser cannot spawn a CLI itself. The bridge is
+// not part of this board: it runs elsewhere and this card only talks to it, at the deployment's
+// default URL (VITE_SC_BRIDGE_URL, see .env.example) or whatever the card's own config says.
 //
 // The bridge's API is deliberately thin — an SSE stream of the CLI's output, and a POST that
 // writes a line to its stdin:
@@ -16,10 +16,17 @@
 // which is what makes telling them apart possible at all.
 
 /**
- * Where the bridge lives, e.g. http://159.223.204.39:8787 — set VITE_SC_BRIDGE_URL in this
- * component's .env. Empty means the card has nowhere to talk to, and says so.
+ * The bridge every Chat card uses unless it is told otherwise: VITE_SC_BRIDGE_URL in this
+ * component's .env, e.g. http://159.223.204.39:8787. A card can point somewhere else with
+ * `comp.bridgeUrl` in its own config; with neither set there is nowhere to talk to, and the
+ * card says so.
  */
-export const BRIDGE_URL = (import.meta.env.VITE_SC_BRIDGE_URL ?? "").replace(/\/+$/, "");
+export const DEFAULT_BRIDGE_URL = normalizeBridgeUrl(import.meta.env.VITE_SC_BRIDGE_URL);
+
+/** Trim what a hand-typed URL tends to carry: surrounding space and a trailing slash. */
+export function normalizeBridgeUrl(url: unknown): string {
+  return typeof url === "string" ? url.trim().replace(/\/+$/, "") : "";
+}
 
 /** What the CLI reports about itself — the session id is what makes a chat resumable. */
 export type ScState = {
@@ -88,8 +95,8 @@ function parseInfo(text: string): ScState | null {
   return { scSession, model: field("Model"), online: field("Network status") === "online" };
 }
 
-export function connectSc(session: string, handlers: ScHandlers): ScClient {
-  const source = new EventSource(`${BRIDGE_URL}/api/sc/stream?session=${encodeURIComponent(session)}`);
+export function connectSc(baseUrl: string, session: string, handlers: ScHandlers): ScClient {
+  const source = new EventSource(`${baseUrl}/api/sc/stream?session=${encodeURIComponent(session)}`);
 
   // Set while we are waiting on an answer of our own. Output is collected per block instead
   // of streamed, so a block can be recognised as ours — and dropped — before it is shown.
@@ -116,7 +123,7 @@ export function connectSc(session: string, handlers: ScHandlers): ScClient {
 
   const post = async (path: string, body: Record<string, unknown> = {}) => {
     try {
-      const res = await fetch(`${BRIDGE_URL}${path}`, {
+      const res = await fetch(`${baseUrl}${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session, ...body }),
