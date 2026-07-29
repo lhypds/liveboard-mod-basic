@@ -6,5 +6,9 @@
   "Note": {
     "enabled": true,
     "allowMultipleInstances": true
+  },
+  "Chat": {
+    "enabled": true,
+    "allowMultipleInstances": true
   }
 }
