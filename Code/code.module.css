@@ -215,6 +215,43 @@
   line-height: 1;
 }
 
+.paneHeaderTitle {
+  flex: 1;
+  min-width: 0;
+}
+
+.consoleClearButton {
+  flex: 0 0 auto;
+  width: auto;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 0;
+  padding: 0 1px;
+  background: #fff;
+  color: #000;
+  font-family: Helvetica, sans-serif;
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.consoleClearButton:hover {
+  background: #000;
+  color: #fff;
+}
+
+.consoleClearButton:focus {
+  outline: none;
+}
+
+.consoleClearButton:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: -2px;
+}
+
 .editorBody {
   flex: 1;
   min-height: 0;
@@ -257,6 +294,21 @@
   font-size: 12px;
   line-height: 1.5;
   tab-size: 2;
+}
+
+/* Console mode only: a faint solid grid behind the code, one cell per
+   monospace character (1ch wide, one line-height tall). */
+.editorGrid {
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.035) 1px, transparent 1px);
+  background-size: 1ch 1.5em;
+  background-repeat: repeat;
+  /* Align the grid's first cell to where the text actually starts (after the
+     7px padding) instead of the padding box's outer edge, and keep it pinned
+     to the text as the textarea scrolls internally. */
+  background-origin: content-box;
+  background-attachment: local;
 }
 
 .consoleBody {

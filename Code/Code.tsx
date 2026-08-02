@@ -45,6 +45,7 @@ const STRINGS = {
   reset: { en: "Reset", ja: "リセット", zh: "重置" },
   editor: { en: "Editor", ja: "エディター", zh: "编辑器" },
   console: { en: "Console", ja: "コンソール", zh: "控制台" },
+  clearConsole: { en: "Clear console", ja: "コンソールをクリア", zh: "清空控制台" },
   empty: { en: "Run code to see the output.", ja: "コードを実行すると結果が表示されます。", zh: "执行代码后将在这里显示结果。" },
   completed: { en: "Completed.", ja: "完了しました。", zh: "执行完成。" },
   timedOut: { en: "Execution timed out.", ja: "実行がタイムアウトしました。", zh: "执行超时。" },
@@ -230,6 +231,7 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
   const htmlRunPendingRef = useRef(false);
   const consoleBodyRef = useRef<HTMLDivElement>(null);
   const lineNumbersRef = useRef<HTMLPreElement>(null);
+  const interpreterInputRef = useRef<HTMLTextAreaElement>(null);
 
   const clearRunTimer = useCallback(() => {
     if (runTimerRef.current !== null) {
@@ -257,7 +259,7 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
       return next.slice(start);
     });
     return line.id;
-  }, []);
+  }, [setOutput]);
 
   const stopWorkers = useCallback(() => {
     javascriptWorkerRef.current?.terminate();
@@ -579,7 +581,7 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
             <div className={styles.editorBody}>
               <pre ref={lineNumbersRef} className={styles.lineNumbers} aria-hidden="true">{lineNumbers}</pre>
               <textarea
-                className={styles.editor}
+                className={`${styles.editor} ${styles.editorGrid}`}
                 value={sources[language]}
                 onChange={(event) => updateSource(event.target.value)}
                 onKeyDown={handleEditorKeyDown}
@@ -595,8 +597,24 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
         )}
 
         {showConsole && (
-          <section className={`${styles.consolePane} ${mode === "interpreter" ? styles.interpreterPane : ""}`}>
-            <div className={styles.paneHeader}>{mode === "interpreter" ? `Python ${STRINGS.interpreter[locale]}` : STRINGS.console[locale]}</div>
+          <section
+            className={`${styles.consolePane} ${mode === "interpreter" ? styles.interpreterPane : ""}`}
+            onClick={() => {
+              if (mode === "interpreter") interpreterInputRef.current?.focus();
+            }}
+          >
+            <div className={styles.paneHeader}>
+              <span className={styles.paneHeaderTitle}>{mode === "interpreter" ? `Python ${STRINGS.interpreter[locale]}` : STRINGS.console[locale]}</span>
+              <button
+                type="button"
+                className={styles.consoleClearButton}
+                aria-label={STRINGS.clearConsole[locale]}
+                title={STRINGS.clearConsole[locale]}
+                onClick={() => setOutput([])}
+              >
+                clear
+              </button>
+            </div>
             <div className={styles.consoleBody} ref={consoleBodyRef}>
               {output.length === 0 && mode !== "interpreter" && <div className={styles.emptyOutput}>{STRINGS.empty[locale]}</div>}
               {output.map((line) => (
@@ -606,6 +624,7 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
                 <label className={styles.promptRow}>
                   <span className={styles.prompt}>&gt;&gt;&gt;</span>
                   <textarea
+                    ref={interpreterInputRef}
                     value={interpreterDraft}
                     onChange={(event) => setInterpreterDraft(event.target.value)}
                     onKeyDown={handleInterpreterKeyDown}
