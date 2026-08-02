@@ -98,6 +98,34 @@ function buildHtmlDocument(source: string, channel: string): string {
   const bridge = `<script>
 (() => {
   const channel = ${JSON.stringify(channel)};
+  const createMemoryStorage = () => {
+    const values = new Map();
+    return {
+      get length() { return values.size; },
+      clear() { values.clear(); },
+      getItem(key) {
+        key = String(key);
+        return values.has(key) ? values.get(key) : null;
+      },
+      key(index) { return Array.from(values.keys())[Number(index)] ?? null; },
+      removeItem(key) { values.delete(String(key)); },
+      setItem(key, value) { values.set(String(key), String(value)); }
+    };
+  };
+  for (const name of ["localStorage", "sessionStorage"]) {
+    try {
+      window[name].length;
+    } catch (_error) {
+      try {
+        Object.defineProperty(window, name, {
+          configurable: true,
+          value: createMemoryStorage()
+        });
+      } catch (_storageError) {
+        // The runtime error bridge below will report access failures.
+      }
+    }
+  }
   const seen = new WeakSet();
   const format = (value) => {
     if (typeof value === "string") return value;
