@@ -1,0 +1,393 @@
+.container {
+  box-sizing: border-box;
+  width: calc(100% + 10px);
+  height: calc(100% + 10px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  overflow: hidden;
+  background: #fff;
+}
+
+.toolbar {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.field span {
+  flex-shrink: 0;
+  color: #000;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.dropdownWrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.dropdownTrigger {
+  min-width: 78px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  box-sizing: border-box;
+  border: 1px solid #000;
+  padding: 0 6px;
+  background: #fff;
+  color: #000;
+  font-family: Helvetica, sans-serif;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.dropdownWrapper:hover .dropdownTrigger:not(:disabled),
+.dropdownWrapper[data-open="true"] .dropdownTrigger:not(:disabled) {
+  background: #000;
+  color: #fff;
+}
+
+.dropdownTrigger:focus,
+.dropdownOption:focus {
+  outline: none;
+}
+
+.dropdownTrigger:focus-visible,
+.dropdownOption:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: -2px;
+}
+
+.dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 999;
+  min-width: 100%;
+  width: max-content;
+  flex-direction: column;
+  margin-top: -1px;
+}
+
+.dropdownWrapper:hover .dropdown,
+.dropdownWrapper[data-open="true"] .dropdown {
+  display: flex;
+}
+
+.dropdownOption {
+  min-width: 100%;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  box-sizing: border-box;
+  border: 1px solid #000;
+  border-top: none;
+  padding: 0 6px;
+  background: #fff;
+  color: #000;
+  font-family: Helvetica, sans-serif;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dropdownOption:first-child {
+  border-top: 1px solid #000;
+}
+
+.dropdownOption:hover,
+.dropdownActive {
+  background: #000;
+  color: #fff;
+}
+
+.toolbarSpacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.runButton,
+.resetButton {
+  flex-shrink: 0;
+  width: 58px;
+  height: 24px;
+  box-sizing: border-box;
+  border: 1px solid #000;
+  border-radius: 0;
+  padding: 0 9px;
+  font-family: Helvetica, sans-serif;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.runButton:disabled,
+.resetButton:disabled,
+.dropdownTrigger:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.runButton {
+  background: #000;
+  color: #fff;
+}
+
+.runButton:not(:disabled):hover {
+  background: #fff;
+  color: #000;
+}
+
+.resetButton {
+  background: #fff;
+  color: #000;
+}
+
+.resetButton:not(:disabled):hover {
+  background: #000;
+  color: #fff;
+}
+
+.workspace {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #000;
+  background: #fff;
+}
+
+.editorPane,
+.consolePane {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+.generalWorkspace .editorPane {
+  flex: 3 1 0;
+}
+
+.generalWorkspace .consolePane {
+  flex: 1 1 0;
+  border-top: 1px solid #000;
+}
+
+.workspace:not(.generalWorkspace) .editorPane,
+.interpreterPane {
+  flex: 1 1 0;
+}
+
+.paneHeader {
+  flex: 0 0 20px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0 7px;
+  border-bottom: 1px solid #000;
+  background: #fff;
+  color: #000;
+  font-family: Helvetica, sans-serif;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.editorBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.lineNumbers {
+  flex: 0 0 auto;
+  min-width: 34px;
+  height: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  overflow: hidden;
+  border-right: 1px solid #000;
+  padding: 7px 6px;
+  background: #fff;
+  color: #000;
+  text-align: right;
+  user-select: none;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.editor {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  border: 0;
+  outline: none;
+  padding: 7px;
+  background: transparent;
+  color: #000;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  tab-size: 2;
+}
+
+.consoleBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 6px 7px;
+  color: #000;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  scrollbar-width: none;
+}
+
+.consoleBody::-webkit-scrollbar {
+  display: none;
+}
+
+.emptyOutput {
+  color: #000;
+  opacity: 0.55;
+}
+
+.outputLine {
+  margin: 0 0 2px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+
+.log,
+.input {
+  color: #000;
+}
+
+.warn {
+  color: #000;
+  text-decoration: underline;
+}
+
+.error {
+  color: #000;
+  font-weight: 400;
+}
+
+.result {
+  color: #000;
+  font-weight: 400;
+}
+
+.status {
+  color: #000;
+  opacity: 0.55;
+}
+
+.promptRow {
+  flex: 1 0 22px;
+  min-height: 22px;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  margin: 0;
+  cursor: text;
+}
+
+.prompt {
+  flex: 0 0 auto;
+  color: #000;
+  font-weight: 400;
+}
+
+.promptRow textarea {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  resize: none;
+  border: 0;
+  outline: none;
+  padding: 0;
+  background: transparent;
+  color: #000;
+  font: inherit;
+}
+
+.interpreterPane .outputLine {
+  margin-bottom: 0;
+}
+
+.promptRow textarea:disabled {
+  color: #000;
+  -webkit-text-fill-color: #000;
+  opacity: 0.45;
+}
+
+.preview {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: #fff;
+}
+
+.hiddenPreview {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 420px) {
+  .toolbar {
+    gap: 5px;
+  }
+
+  .field span {
+    display: none;
+  }
+
+  .dropdownTrigger {
+    min-width: 70px;
+  }
+
+  .runButton,
+  .resetButton {
+    padding: 0 6px;
+  }
+}

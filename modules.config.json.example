@@ -10,5 +10,9 @@
   "Chat": {
     "enabled": true,
     "allowMultipleInstances": true
+  },
+  "Code": {
+    "enabled": true,
+    "allowMultipleInstances": true
   }
 }
