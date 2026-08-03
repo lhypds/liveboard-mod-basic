@@ -22,3 +22,19 @@
   box-sizing: border-box;
   outline: none;
 }
+
+/* A faint solid grid behind the note text, matching the Code editor's grid
+   but sized two characters wide per cell (roughly one CJK character) instead
+   of one, since notes are typically written in CJK text. */
+.textareaGrid {
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.035) 1px, transparent 1px);
+  background-size: 2ch 1.5em;
+  background-repeat: repeat;
+  /* Align the grid's first cell to where the text actually starts (after
+     padding) instead of the padding box's outer edge, and keep it pinned to
+     the text as the textarea scrolls internally. */
+  background-origin: content-box;
+  background-attachment: local;
+}

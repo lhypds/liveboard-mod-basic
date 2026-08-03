@@ -30,7 +30,7 @@ export default function Note({ config }: { config: Record<string, unknown> }) {
       <TextArea
         value={value}
         onChange={handleChange}
-        className={styles.textarea}
+        className={`${styles.textarea} ${styles.textareaGrid}`}
       />
     </div>
   );
