@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import JavaScriptWorker from "./javascript.worker?worker";
 import PythonWorker from "./python.worker?worker";
+import { highlight, type Language } from "./highlight";
 import styles from "./code.module.css";
 
 type Locale = "en" | "ja" | "zh";
-type Language = "html" | "javascript" | "python";
 type Mode = "general" | "interpreter" | "preview";
 type OutputKind = "log" | "warn" | "error" | "result" | "status" | "input";
 
@@ -259,6 +259,7 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
   const htmlRunPendingRef = useRef(false);
   const consoleBodyRef = useRef<HTMLDivElement>(null);
   const lineNumbersRef = useRef<HTMLPreElement>(null);
+  const highlightRef = useRef<HTMLPreElement>(null);
   const interpreterInputRef = useRef<HTMLTextAreaElement>(null);
 
   const clearRunTimer = useCallback(() => {
@@ -608,18 +609,28 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
           <section className={styles.editorPane}>
             <div className={styles.editorBody}>
               <pre ref={lineNumbersRef} className={styles.lineNumbers} aria-hidden="true">{lineNumbers}</pre>
-              <textarea
-                className={`${styles.editor} ${styles.editorGrid}`}
-                value={sources[language]}
-                onChange={(event) => updateSource(event.target.value)}
-                onKeyDown={handleEditorKeyDown}
-                onScroll={(event) => {
-                  if (lineNumbersRef.current) lineNumbersRef.current.scrollTop = event.currentTarget.scrollTop;
-                }}
-                wrap="off"
-                spellCheck={false}
-                aria-label={`${language} ${STRINGS.editor[locale]}`}
-              />
+              <div className={styles.editorSurface}>
+                <pre ref={highlightRef} className={styles.highlight} aria-hidden="true">
+                  <code dangerouslySetInnerHTML={{ __html: highlight(sources[language], language) }} />
+                </pre>
+                <textarea
+                  className={`${styles.editor} ${styles.editorGrid}`}
+                  value={sources[language]}
+                  onChange={(event) => updateSource(event.target.value)}
+                  onKeyDown={handleEditorKeyDown}
+                  onScroll={(event) => {
+                    const target = event.currentTarget;
+                    if (lineNumbersRef.current) lineNumbersRef.current.scrollTop = target.scrollTop;
+                    if (highlightRef.current) {
+                      highlightRef.current.scrollTop = target.scrollTop;
+                      highlightRef.current.scrollLeft = target.scrollLeft;
+                    }
+                  }}
+                  wrap="off"
+                  spellCheck={false}
+                  aria-label={`${language} ${STRINGS.editor[locale]}`}
+                />
+              </div>
             </div>
           </section>
         )}

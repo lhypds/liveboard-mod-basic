@@ -279,18 +279,82 @@
   line-height: 1.5;
 }
 
-.editor {
+.editorSurface {
+  position: relative;
+  z-index: 0;
   flex: 1;
-  min-height: 0;
   min-width: 0;
-  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.highlight {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  margin: 0;
+  overflow: hidden;
+  pointer-events: none;
+  box-sizing: border-box;
+  padding: 7px;
+  color: #000;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.highlight :global(.token.comment),
+.highlight :global(.token.prolog),
+.highlight :global(.token.doctype),
+.highlight :global(.token.cdata) {
+  color: #6a737d;
+}
+
+.highlight :global(.token.tag) {
+  color: #22863a;
+}
+
+.highlight :global(.token.attr-name) {
+  color: #6f42c1;
+}
+
+.highlight :global(.token.attr-value),
+.highlight :global(.token.string),
+.highlight :global(.token.char) {
+  color: #032f62;
+}
+
+.highlight :global(.token.number),
+.highlight :global(.token.boolean),
+.highlight :global(.token.constant),
+.highlight :global(.token.symbol) {
+  color: #005cc5;
+}
+
+.highlight :global(.token.keyword),
+.highlight :global(.token.atrule) {
+  color: #d73a49;
+}
+
+.highlight :global(.token.function),
+.highlight :global(.token.class-name) {
+  color: #6f42c1;
+}
+
+.editor {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
   box-sizing: border-box;
   resize: none;
   border: 0;
   outline: none;
   padding: 7px;
   background: transparent;
-  color: #000;
+  color: transparent;
+  caret-color: #000;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;

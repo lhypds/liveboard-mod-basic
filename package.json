@@ -11,6 +11,10 @@
     "react-i18next": "^17.0.8"
   },
   "dependencies": {
+    "prismjs": "^1.30.0",
     "pyodide": "^314.0.3"
+  },
+  "devDependencies": {
+    "@types/prismjs": "^1.26.5"
   }
 }
