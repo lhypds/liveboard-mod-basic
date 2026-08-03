@@ -21,6 +21,8 @@
   height: 100%;
   box-sizing: border-box;
   outline: none;
+  font-family: var(--font-title);
+  line-height: 1.5;
 }
 
 /* A faint solid grid behind the note text, matching the Code editor's grid
@@ -30,7 +32,11 @@
   background-image:
     linear-gradient(to right, rgba(0, 0, 0, 0.035) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(0, 0, 0, 0.035) 1px, transparent 1px);
-  background-size: 2ch 1.5em;
+  /* Fira Code has no CJK glyphs, so the browser substitutes a system font for
+     CJK characters; that substitute renders ~1em wide, not 2ch like a true
+     CJK-aware monospace font would. Split the difference so neither script
+     drifts far from the cell. */
+  background-size: calc((1em + 2ch) / 2) 1.5em;
   background-repeat: repeat;
   /* Align the grid's first cell to where the text actually starts (after
      padding) instead of the padding box's outer edge, and keep it pinned to

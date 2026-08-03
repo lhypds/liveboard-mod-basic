@@ -76,39 +76,42 @@ export default function Website({ config }: { config: Record<string, unknown> })
   }
 
   return (
-    <div className={styles.container}>
-      {blockAll && <div className={styles.blocker} />}
-      <iframe
-        ref={iframeRef}
-        src={url}
-        style={
-          hasCrop
-            ? {
-                position: "absolute",
-                top: -cropY,
-                left: -cropX,
-                width: renderW ?? "100%",
-                height: renderH ?? "100%",
-                border: "none",
-                transform: zoom !== 1 ? `scale(${zoom})` : undefined,
-                transformOrigin: zoom !== 1 ? "top left" : undefined,
-              }
-            : zoom !== 1
+    <div className={styles.wrapper}>
+      <div className={styles.border} />
+      <div className={styles.container}>
+        {blockAll && <div className={styles.blocker} />}
+        <iframe
+          ref={iframeRef}
+          src={url}
+          style={
+            hasCrop
               ? {
-                  width: `${100 / zoom}%`,
-                  height: `${100 / zoom}%`,
+                  position: "absolute",
+                  top: -cropY,
+                  left: -cropX,
+                  width: renderW ?? "100%",
+                  height: renderH ?? "100%",
                   border: "none",
-                  display: "block",
-                  transform: `scale(${zoom})`,
-                  transformOrigin: "top left",
+                  transform: zoom !== 1 ? `scale(${zoom})` : undefined,
+                  transformOrigin: zoom !== 1 ? "top left" : undefined,
                 }
-              : undefined
-        }
-        className={hasCrop || zoom !== 1 ? undefined : styles.iframe}
-        onLoad={handleLoad}
-        title="Embedded content"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-      />
+              : zoom !== 1
+                ? {
+                    width: `${100 / zoom}%`,
+                    height: `${100 / zoom}%`,
+                    border: "none",
+                    display: "block",
+                    transform: `scale(${zoom})`,
+                    transformOrigin: "top left",
+                  }
+                : undefined
+          }
+          className={hasCrop || zoom !== 1 ? undefined : styles.iframe}
+          onLoad={handleLoad}
+          title="Embedded content"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        />
+      </div>
     </div>
   );
 }
