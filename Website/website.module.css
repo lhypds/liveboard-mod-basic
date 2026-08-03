@@ -1,8 +1,12 @@
 .container {
   position: relative;
-  width: 100%;
-  height: 100%;
+  box-sizing: border-box;
+  /* Card body adds extra padding-right/bottom for scrollbar clearance; grow
+     into it so the border sits at an even margin on all four sides. */
+  width: calc(100% + 10px);
+  height: calc(100% + 10px);
   overflow: hidden;
+  border: 1px solid #ccc;
 }
 
 .iframe {
@@ -19,10 +23,13 @@
 }
 
 .placeholder {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  width: calc(100% + 10px);
+  height: calc(100% + 10px);
+  border: 1px solid #ccc;
 }
 
 .hint {
