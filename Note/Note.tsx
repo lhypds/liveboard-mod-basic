@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import TextArea from "@ui/TextArea";
+import { useFollowBottom } from "@hooks/useFollowBottom";
 import styles from "./note.module.css";
 
 /* One indent level = two spaces, i.e. exactly one background grid cell. */
@@ -10,6 +11,8 @@ export default function Note({ config }: { config: Record<string, unknown> }) {
   const save = config._save as ((comp: Record<string, unknown>) => void) | undefined;
 
   const [value, setValue] = useState(() => comp?.content ?? "");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { mark, follow } = useFollowBottom(textareaRef);
 
   // Sync when content changes from outside (e.g. import/restore)
   const lastSavedRef = useRef(comp?.content ?? "");
@@ -17,9 +20,18 @@ export default function Note({ config }: { config: Record<string, unknown> }) {
     const incoming = comp?.content ?? "";
     if (incoming !== lastSavedRef.current) {
       lastSavedRef.current = incoming;
+      // The textarea still holds the old text until the render below lands, so
+      // this is the last moment the reader's place in it can be read
+      mark();
       setValue(incoming);
     }
-  }, [comp?.content]);
+  }, [comp?.content, mark]);
+
+  // Text generated into the note arrives a chunk at a time; keep the newest line
+  // in view for a reader who was already at the end of it
+  useLayoutEffect(() => {
+    follow();
+  }, [value, follow]);
 
   // A note stamps its creation time the first time it mounts — a card added from the
   // Add menu starts with no `createdAt`, so this is the moment it was created. The ref
@@ -45,7 +57,6 @@ export default function Note({ config }: { config: Record<string, unknown> }) {
 
   // Re-assert the caret after a keyboard edit: React rewrites the textarea's value
   // on the following render, which would otherwise drop the selection to the end.
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pendingSelectionRef = useRef<[number, number] | null>(null);
   useLayoutEffect(() => {
     const selection = pendingSelectionRef.current;

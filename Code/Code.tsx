@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useFollowBottom } from "@hooks/useFollowBottom";
 import JavaScriptWorker from "./javascript.worker?worker";
 import PythonWorker from "./python.worker?worker";
 import { highlight, type Language } from "./highlight";
@@ -300,6 +301,21 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
   const lineNumbersRef = useRef<HTMLPreElement>(null);
   const highlightRef = useRef<HTMLPreElement>(null);
   const interpreterInputRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const { mark, follow } = useFollowBottom(editorRef);
+
+  /* The gutter and the highlighted copy underneath the editor don't scroll
+     themselves; they're moved to wherever the editor is, whether the reader
+     scrolled it or the code below did. */
+  const syncEditorScroll = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (lineNumbersRef.current) lineNumbersRef.current.scrollTop = editor.scrollTop;
+    if (highlightRef.current) {
+      highlightRef.current.scrollTop = editor.scrollTop;
+      highlightRef.current.scrollLeft = editor.scrollLeft;
+    }
+  }, []);
 
   const clearRunTimer = useCallback(() => {
     if (runTimerRef.current !== null) {
@@ -430,11 +446,24 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
     setGenerate?.({
       content: () => liveRef.current.source,
       prompt: `${GENERATE_PROMPT[language]} ${GENERATE_RULE}`,
-      onGenerated: (next) => liveRef.current.update(next),
+      onGenerated: (next) => {
+        // The editor still shows the source this chunk is about to replace, so
+        // read the reader's place in it before handing the new one over
+        mark();
+        liveRef.current.update(next);
+      },
     });
     return () => setGenerate?.(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [language, mode]);
+
+  // A rewrite arrives a chunk at a time; keep the newest line in view for a reader
+  // who was already at the end of the file. The source is named here so the effect
+  // can be checked against it.
+  const editorSource = sources[language];
+  useLayoutEffect(() => {
+    if (follow()) syncEditorScroll();
+  }, [editorSource, follow, syncEditorScroll]);
 
   function persist(nextLanguage: Language, nextMode: Mode, nextSources: Sources) {
     save?.({ ...comp, language: nextLanguage, mode: nextMode, sources: nextSources });
@@ -804,18 +833,12 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
                   <code dangerouslySetInnerHTML={{ __html: highlight(sources[language], language) }} />
                 </pre>
                 <textarea
+                  ref={editorRef}
                   className={`${styles.editor} ${styles.editorGrid}`}
                   value={sources[language]}
                   onChange={(event) => updateSource(event.target.value)}
                   onKeyDown={handleEditorKeyDown}
-                  onScroll={(event) => {
-                    const target = event.currentTarget;
-                    if (lineNumbersRef.current) lineNumbersRef.current.scrollTop = target.scrollTop;
-                    if (highlightRef.current) {
-                      highlightRef.current.scrollTop = target.scrollTop;
-                      highlightRef.current.scrollLeft = target.scrollLeft;
-                    }
-                  }}
+                  onScroll={syncEditorScroll}
                   wrap="off"
                   spellCheck={false}
                   aria-label={`${language} ${STRINGS.editor[locale]}`}
