@@ -23,6 +23,8 @@ type WorkerMessage = {
   text?: string;
 };
 
+const INDENT = "  ";
+
 const DEFAULT_SOURCES: Sources = {
   html: `<!doctype html>
 <html>
@@ -85,6 +87,14 @@ function normalizeComp(comp: CodeComp | undefined): { language: Language; mode: 
       python: typeof comp?.sources?.python === "string" ? comp.sources.python : DEFAULT_SOURCES.python,
     },
   };
+}
+
+/* How much leading whitespace one Shift+Tab peels off a line: a full two-space
+   level, a single tab from pasted code, or a lone stray space. */
+function outdentWidth(line: string): number {
+  if (line.startsWith("\t")) return 1;
+  if (line.startsWith(INDENT)) return INDENT.length;
+  return line.startsWith(" ") ? 1 : 0;
 }
 
 function formatInterpreterInput(code: string): string {
@@ -529,13 +539,46 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
       handleRun();
       return;
     }
-    if (event.key !== "Tab") return;
+    if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey) return;
     event.preventDefault();
     const input = event.currentTarget;
-    const next = `${input.value.slice(0, input.selectionStart)}  ${input.value.slice(input.selectionEnd)}`;
-    const cursor = input.selectionStart + 2;
+    const text = input.value;
+    const { selectionStart, selectionEnd } = input;
+
+    // Plain Tab inside a single line stays a literal two-space insert; only a
+    // multi-line selection (and any Shift+Tab) shifts whole lines.
+    const spansLines = text.slice(selectionStart, selectionEnd).includes("\n");
+    if (!event.shiftKey && !spansLines) {
+      const next = `${text.slice(0, selectionStart)}${INDENT}${text.slice(selectionEnd)}`;
+      const cursor = selectionStart + INDENT.length;
+      updateSource(next);
+      window.requestAnimationFrame(() => input.setSelectionRange(cursor, cursor));
+      return;
+    }
+
+    // Grow the range to whole lines so the edit always starts at column 0. A
+    // selection dragged onto the start of the next line stops at the newline,
+    // so that untouched line is left alone.
+    const rangeEnd = selectionEnd > selectionStart && text[selectionEnd - 1] === "\n" ? selectionEnd - 1 : selectionEnd;
+    const blockStart = text.lastIndexOf("\n", selectionStart - 1) + 1;
+    const newlineAfter = text.indexOf("\n", rangeEnd);
+    const blockEnd = newlineAfter === -1 ? text.length : newlineAfter;
+
+    let firstDelta = 0;
+    let totalDelta = 0;
+    const lines = text.slice(blockStart, blockEnd).split("\n").map((line, index) => {
+      const delta = event.shiftKey ? -outdentWidth(line) : INDENT.length;
+      if (index === 0) firstDelta = delta;
+      totalDelta += delta;
+      return delta < 0 ? line.slice(-delta) : delta > 0 ? INDENT + line : line;
+    });
+    if (totalDelta === 0) return;
+
+    const next = text.slice(0, blockStart) + lines.join("\n") + text.slice(blockEnd);
+    const nextStart = Math.max(blockStart, selectionStart + firstDelta);
+    const nextEnd = Math.max(nextStart, selectionEnd + totalDelta);
     updateSource(next);
-    window.requestAnimationFrame(() => input.setSelectionRange(cursor, cursor));
+    window.requestAnimationFrame(() => input.setSelectionRange(nextStart, nextEnd));
   }
 
   function handleInterpreterKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
