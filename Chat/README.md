@@ -7,9 +7,19 @@ Talks to [simple-ai](https://simple-ai.io) through the `sc` CLI, not its web API
 
 The whole card is one terminal: type at the prompt, `Enter` runs the line, and the CLI's
 output streams into the same box. Only the line after the prompt is editable — the
-scrollback can be selected and copied but not changed. The **Reset** button in the card
-header runs `:reset`, which starts a new session and clears the screen; the card gets that
-button by registering a handler through the `_setReset` prop, so no config declares it.
+scrollback can be selected and copied but not changed. `Shift+Enter` breaks a line, so a
+message can span several and still send as one (see *Multi-line* below). The **Reset**
+button in the card header runs `:reset`, which starts a new session and clears the screen;
+the card gets that button by registering a handler through the `_setReset` prop, so no
+config declares it.
+
+Two commands take the screen with them, as they do in the CLI and on the bridge's own
+terminal page. `:clear` wipes it — the CLI clears its own with an escape code (`\x1Bc`) that
+the bridge strips out on the way here, so the card would otherwise show nothing happening.
+`:reset` wipes it *and* starts a new conversation, so typing it goes down the same path as
+the Reset button: the card stores the new session id instead of holding on to the one just
+abandoned. Their reset-suffixed cousins (`:model reset`, `:store reset`, …) are other
+commands and neither clears.
 
 Only the CLI's own output ever goes in the box. While `sc` is still coming up — or when
 there is no bridge to reach at all — the card says so with a message in the middle of an
@@ -36,6 +46,22 @@ POST /api/sc/send   { session, text }  write one line to the CLI's stdin
 
 One CLI per card: the `session` id is the card's own instance id, so two cards never share a
 conversation, and duplicating a card gives the copy its own CLI.
+
+
+Multi-line
+----------
+
+`Shift+Enter` breaks a line; `Enter` sends the whole thing as one message, and what is on
+screen is what gets sent — a pasted block keeps its line breaks too.
+
+That works because of the bridge, not the card. The CLI reads stdin with readline, so a
+newline there is a submission boundary: a multi-line message travelling as itself would
+arrive as several inputs, and a second line starting with `:` would run as a command. The
+bridge therefore JSON-encodes such a message onto a single line behind a marker byte and the
+CLI unpacks it on the way in — the convention lives in `simple-ai-chat`'s `utils/stdin.js`,
+with `writeLine` in the bridge's `serve.mjs` as the encoding half. Single-line messages go
+through untouched, so **against a bridge or CLI too old for this, only multi-line is
+affected**: it would arrive as several separate inputs.
 
 Everything beyond typing is said in the CLI's own language — `:info` to read the session id
 and model, `:session attach <id>` to resume, `:reset` to start over. `sc.ts` recognises that

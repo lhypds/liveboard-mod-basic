@@ -6,7 +6,7 @@ import styles from "./note.module.css";
 const INDENT = "  ";
 
 export default function Note({ config }: { config: Record<string, unknown> }) {
-  const comp = config.comp as { content?: string } | undefined;
+  const comp = config.comp as { content?: string; createdAt?: number; updatedAt?: number } | undefined;
   const save = config._save as ((comp: Record<string, unknown>) => void) | undefined;
 
   const [value, setValue] = useState(() => comp?.content ?? "");
@@ -21,11 +21,26 @@ export default function Note({ config }: { config: Record<string, unknown> }) {
     }
   }, [comp?.content]);
 
+  // A note stamps its creation time the first time it mounts — a card added from the
+  // Add menu starts with no `createdAt`, so this is the moment it was created. The ref
+  // keeps the double-mount under StrictMode from stamping twice.
+  const stampedRef = useRef(false);
+  useEffect(() => {
+    if (stampedRef.current || comp?.createdAt) return;
+    stampedRef.current = true;
+    save?.({ ...comp, createdAt: Date.now() });
+  }, [comp, save]);
+
+  // Both times land in the comp config, which is what the Info modal reads.
+  function persist(next: string) {
+    lastSavedRef.current = next;
+    save?.({ ...comp, content: next, createdAt: comp?.createdAt ?? Date.now(), updatedAt: Date.now() });
+  }
+
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const next = e.target.value;
     setValue(next);
-    lastSavedRef.current = next;
-    save?.({ ...comp, content: next });
+    persist(next);
   }
 
   // Re-assert the caret after a Tab edit: React rewrites the textarea's value on
@@ -80,8 +95,7 @@ export default function Note({ config }: { config: Record<string, unknown> }) {
     if (!document.execCommand("insertText", false, nextBlock)) {
       const next = text.slice(0, blockStart) + nextBlock + text.slice(blockEnd);
       setValue(next);
-      lastSavedRef.current = next;
-      save?.({ ...comp, content: next });
+      persist(next);
     }
   }
 

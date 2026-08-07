@@ -44,11 +44,21 @@ function useLang(): Lang {
 }
 
 // `:login <user> <password>` is forwarded to the CLI as typed, but the terminal is saved
-// in the board's config, so the password never goes in it.
+// in the board's config, so the password never goes in it. Matched per line, because a
+// message can span several.
 function forScrollback(line: string): string {
-  const login = line.match(/^(:login\s+\S+\s+)(\S+)(.*)$/i);
-  return login ? `${login[1]}${"*".repeat(login[2].length)}${login[3]}` : line;
+  return line.replace(/^(:login\s+\S+\s+)(\S+)(.*)$/gim, (_, head, pass, tail) => {
+    return `${head}${"*".repeat(pass.length)}${tail}`;
+  });
 }
+
+// The two lines that wipe the screen, as they do in the CLI and on the bridge's own terminal
+// page. `:clear` clears the CLI's with an escape code (cli.js writes `\x1Bc`) that the bridge
+// strips out on its way here, so it would otherwise pass unnoticed; `:reset` starts the
+// conversation over, which the card has more to do about — see submit(). The reset-suffixed
+// commands (`:model reset`, `:store reset`, …) are other commands and match neither.
+const CLEAR = /^:clear\b/i;
+const RESET = /^:reset\b/i;
 
 export default function Chat({ config }: { config: Record<string, unknown> }) {
   const lang = useLang();
@@ -99,7 +109,10 @@ export default function Chat({ config }: { config: Record<string, unknown> }) {
   // The prompt the CLI last left on screen, so clearing for a new session can put it back.
   const promptRef = useRef(trailingPrompt(comp?.terminal ?? ""));
 
-  const append = (text: string) => setLog((prev) => cap(prev + text));
+  // The CLI puts a blank line before each prompt, which on an empty screen would be a blank
+  // first line — after a clear, the prompt belongs at the top of the card.
+  const append = (text: string) =>
+    setLog((prev) => cap(prev + (prev ? text : text.replace(/^[\r\n]+/, ""))));
 
   // What we last wrote to (or read from) the card's config, so neither direction of the
   // sync loops: an incoming config that matches this is our own echo coming back.
@@ -218,13 +231,20 @@ export default function Chat({ config }: { config: Record<string, unknown> }) {
   // Whether new output should scroll into view — false while the reader has scrolled up.
   const stickRef = useRef(true);
 
-  // Keep the caret where a terminal keeps it: at the end, after the prompt. A reader who
-  // has selected text to copy is left alone.
+  // New output puts the caret back where a terminal keeps it: at the end, after the prompt.
+  // A reader who has selected text to copy is left alone. Keyed on the scrollback alone and
+  // not on the draft, or every keystroke would drag the caret to the end — which is where it
+  // already is when typing at the end, and never where it was meant to go when editing an
+  // earlier line of a multi-line message.
   useEffect(() => {
     const el = areaRef.current;
     if (!el) return;
     if (el.selectionStart === el.selectionEnd) el.setSelectionRange(el.value.length, el.value.length);
-    if (stickRef.current) el.scrollTop = el.scrollHeight;
+  }, [log]);
+
+  useEffect(() => {
+    const el = areaRef.current;
+    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
   }, [log, draft]);
 
   function handleScroll() {
@@ -240,17 +260,31 @@ export default function Chat({ config }: { config: Record<string, unknown> }) {
       e.target.value = log + draft;
       return;
     }
-    // A pasted block would otherwise become several stdin lines.
-    setDraft(next.slice(log.length).replace(/[\r\n]+/g, " "));
+    // Line breaks are kept, in the draft and all the way to the model: the bridge encodes a
+    // multi-line message onto one stdin line so the CLI still reads it as a single
+    // submission. What is on screen is what gets sent, pasted blocks included.
+    setDraft(next.slice(log.length));
   }
 
   function submit() {
     const line = draft.trim();
     if (!line || generatingRef.current || phase !== "live") return;
     setDraft("");
-    append(`${forScrollback(line)}\n`);
-    generatingRef.current = true;
     stickRef.current = true;
+
+    // `:reset` is what the card's Reset button does, so it goes the same way: the new
+    // conversation's id is then the one the card stores, instead of the one just abandoned.
+    if (RESET.test(line)) {
+      void newSession();
+      return;
+    }
+
+    generatingRef.current = true;
+    // A line that clears takes the screen with it, itself included — the way it goes in a
+    // terminal. What the CLI prints next, its prompt, is then the whole card.
+    if (CLEAR.test(line)) setLog("");
+    else append(`${forScrollback(line)}\n`);
+
     void clientRef.current?.send(line).then((res) => {
       if (res?.error) {
         generatingRef.current = false;
@@ -261,28 +295,36 @@ export default function Chat({ config }: { config: Record<string, unknown> }) {
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     // Enter runs the line. A live IME composition keeps it, so committing a candidate with
-    // Enter does not submit half a sentence.
-    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+    // Enter does not submit half a sentence. Shift+Enter is left to the box, whose own
+    // default is to break the line — a message can span several, and one still sends as one.
+    if (e.key === "Enter" && !e.nativeEvent.isComposing && !e.shiftKey) {
       e.preventDefault();
       submit();
     }
   }
 
-  // What the card's Reset button does: a new simple-ai session, and a cleared screen with the
-  // prompt back on it — the same as `:reset` in the CLI. Closing over the first render is safe:
+  // What the card's Reset button does, and what typing `:reset` does: a new simple-ai session,
+  // and a cleared screen with the prompt back on it. Closing over the first render is safe:
   // everything it touches is a ref or a setter, so there is nothing stale to capture.
   async function newSession() {
     if (generatingRef.current) return;
-    const res = await clientRef.current?.reset();
-    // No new session means nothing was reset (no bridge, for one) — leave the screen alone
-    // rather than clearing a scrollback that is still the truth.
-    if (!res?.state) return;
-    setDraft("");
-    stickRef.current = true;
-    wantedScSessionRef.current = res.state.scSession;
-    attachedRef.current = true;
-    setState(res.state);
-    setLog(`${res.state.model}> `);
+    // Held for the round trip, so a second Enter cannot start over what is already starting
+    // over. The CLI prints nothing for `:reset`, so no `ready` is coming to release it.
+    generatingRef.current = true;
+    try {
+      const res = await clientRef.current?.reset();
+      // No new session means nothing was reset (no bridge, for one) — leave the screen alone
+      // rather than clearing a scrollback that is still the truth.
+      if (!res?.state) return;
+      setDraft("");
+      stickRef.current = true;
+      wantedScSessionRef.current = res.state.scSession;
+      attachedRef.current = true;
+      setState(res.state);
+      setLog(`${res.state.model}> `);
+    } finally {
+      generatingRef.current = false;
+    }
   }
 
   // Registering is what gives the card its Reset button; unregistering on unmount takes it away.
