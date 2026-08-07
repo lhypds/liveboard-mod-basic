@@ -56,6 +56,11 @@ const STRINGS = {
   editor: { en: "Editor", ja: "エディター", zh: "编辑器" },
   console: { en: "Console", ja: "コンソール", zh: "控制台" },
   clearConsole: { en: "Clear console", ja: "コンソールをクリア", zh: "清空控制台" },
+  search: { en: "Find and replace", ja: "検索と置換", zh: "查找替换" },
+  find: { en: "Find", ja: "検索", zh: "查找" },
+  replace: { en: "Replace", ja: "置換", zh: "替换" },
+  replaceNext: { en: "Replace next", ja: "次を置換", zh: "替换下一个" },
+  replaceAll: { en: "Replace all", ja: "すべて置換", zh: "替换全部" },
   empty: { en: "Run code to see the output.", ja: "コードを実行すると結果が表示されます。", zh: "执行代码后将在这里显示结果。" },
   completed: { en: "Completed.", ja: "完了しました。", zh: "执行完成。" },
   timedOut: { en: "Execution timed out.", ja: "実行がタイムアウトしました。", zh: "执行超时。" },
@@ -73,6 +78,10 @@ const GENERATE_PROMPT: Record<Language, string> = {
   json: "A JSON document, shown as data rather than run. It has to parse.",
   python: "A Python program run under Pyodide in a Web Worker: the standard library and what Pyodide bundles, no network. print is the only way it shows anything.",
 };
+
+/* Matches .editor's padding in code.module.css; scrolling a match into view has to
+   know how much of the textarea's height the text doesn't get. */
+const EDITOR_PADDING = 7;
 
 const GENERATE_RULE =
   "Answer with the source alone — no markdown fences, no commentary — keeping its existing style and indentation unless the instruction says otherwise.";
@@ -124,6 +133,28 @@ function outdentWidth(line: string, indent: string): number {
   if (line.startsWith("\t")) return 1;
   if (line.startsWith(indent)) return indent.length;
   return line.startsWith(" ") ? 1 : 0;
+}
+
+/* Case-insensitive, and wrapping: a search that runs off the end starts again at
+   the top rather than reporting nothing. -1 only ever means "not in the file". */
+function findIn(text: string, query: string, from: number): number {
+  const haystack = text.toLowerCase();
+  const needle = query.toLowerCase();
+  const at = haystack.indexOf(needle, from);
+  return at === -1 ? haystack.indexOf(needle) : at;
+}
+
+function replaceAllIn(text: string, query: string, replacement: string): string {
+  const haystack = text.toLowerCase();
+  const needle = query.toLowerCase();
+  let result = "";
+  let from = 0;
+  for (let at = haystack.indexOf(needle); at !== -1; at = haystack.indexOf(needle, from)) {
+    result += text.slice(from, at) + replacement;
+    // Resume past the replacement, so a replacement containing the query doesn't feed itself
+    from = at + needle.length;
+  }
+  return from === 0 ? text : result + text.slice(from);
 }
 
 function formatInterpreterInput(code: string): string {
@@ -285,6 +316,11 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
   const [interpreterDraft, setInterpreterDraft] = useState("");
   const [pythonReady, setPythonReady] = useState(false);
   const [pythonWorkerGeneration, setPythonWorkerGeneration] = useState(0);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findText, setFindText] = useState("");
+  const [replaceText, setReplaceText] = useState("");
+  // Bumped on every Ctrl+F so the shortcut re-selects the field it already opened
+  const [findFocusNonce, setFindFocusNonce] = useState(0);
 
   const outputIdRef = useRef(0);
   const runIdRef = useRef(0);
@@ -302,6 +338,7 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
   const highlightRef = useRef<HTMLPreElement>(null);
   const interpreterInputRef = useRef<HTMLTextAreaElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const findInputRef = useRef<HTMLInputElement>(null);
   const { mark, follow } = useFollowBottom(editorRef);
 
   /* The gutter and the highlighted copy underneath the editor don't scroll
@@ -410,6 +447,14 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
     const body = consoleBodyRef.current;
     if (body) body.scrollTop = body.scrollHeight;
   }, [output]);
+
+  useEffect(() => {
+    if (!findOpen) return;
+    // After the commit, so a query seeded from the editor's selection is the text
+    // that gets selected here — typing straight over it replaces the whole thing
+    findInputRef.current?.focus();
+    findInputRef.current?.select();
+  }, [findOpen, findFocusNonce]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -620,6 +665,111 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
     persist(language, mode, next);
   }
 
+  function openFind() {
+    const editor = editorRef.current;
+    const selected = editor ? editor.value.slice(editor.selectionStart, editor.selectionEnd) : "";
+    // What the reader had highlighted is almost always what they're looking for
+    if (selected && !selected.includes("\n")) setFindText(selected);
+    setFindOpen(true);
+    setFindFocusNonce((current) => current + 1);
+  }
+
+  function closeFind() {
+    setFindOpen(false);
+    editorRef.current?.focus();
+  }
+
+  /* Put a match on screen and select it. The editor takes focus so the selection
+     is actually painted, and the scroll is done by hand because a browser only
+     keeps the caret in view for edits the reader typed themselves. */
+  function selectMatch(start: number, end: number) {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+    editor.setSelectionRange(start, end);
+    const lineHeight = parseFloat(window.getComputedStyle(editor).lineHeight) || 18;
+    const top = (editor.value.slice(0, start).split("\n").length - 1) * lineHeight;
+    const visible = editor.clientHeight - EDITOR_PADDING * 2;
+    if (top < editor.scrollTop) editor.scrollTop = top;
+    else if (top + lineHeight > editor.scrollTop + visible) editor.scrollTop = top + lineHeight - visible;
+    syncEditorScroll();
+  }
+
+  /* A replacement goes in through the browser's own editing command rather than
+     straight into state, so it lands on the textarea's undo stack and Ctrl+Z takes
+     it back the way it takes back typing. The command needs the editor focused and
+     the range selected; the input event it fires is what reaches updateSource. */
+  function applyEdit(start: number, end: number, text: string) {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+    editor.setSelectionRange(start, end);
+    const applied = text ? document.execCommand("insertText", false, text) : document.execCommand("delete");
+    // Nothing on the undo stack if the engine refused the command, but the edit still happens
+    if (!applied) updateSource(`${editor.value.slice(0, start)}${text}${editor.value.slice(end)}`);
+  }
+
+  function handleFindNext() {
+    const editor = editorRef.current;
+    if (!editor || !findText) return;
+    // Start one character past the match the reader is standing on, so repeated
+    // finds walk forward instead of landing on it again
+    const from = editor.selectionEnd > editor.selectionStart ? editor.selectionStart + 1 : editor.selectionEnd;
+    const at = findIn(sources[language], findText, from);
+    if (at === -1) return;
+    selectMatch(at, at + findText.length);
+  }
+
+  function handleReplaceNext() {
+    const editor = editorRef.current;
+    if (!editor || !findText) return;
+    const text = sources[language];
+    const { selectionStart, selectionEnd } = editor;
+    /* Only what is already selected as a match gets overwritten; from anywhere
+       else this button just walks to the next match, so nothing is rewritten
+       before the reader has seen it. */
+    if (text.slice(selectionStart, selectionEnd).toLowerCase() !== findText.toLowerCase() || selectionEnd === selectionStart) {
+      handleFindNext();
+      return;
+    }
+    const next = `${text.slice(0, selectionStart)}${replaceText}${text.slice(selectionEnd)}`;
+    const resumeAt = selectionStart + replaceText.length;
+    applyEdit(selectionStart, selectionEnd, replaceText);
+    // Walk on to the next match, from the source the replacement just made
+    const at = findIn(next, findText, resumeAt);
+    if (at !== -1) selectMatch(at, at + findText.length);
+  }
+
+  function handleReplaceAll() {
+    if (!findText) return;
+    const text = sources[language];
+    const next = replaceAllIn(text, findText, replaceText);
+    // One edit rather than one per match, so a single Ctrl+Z puts the file back
+    if (next !== text) applyEdit(0, text.length, next);
+  }
+
+  function handleFindFieldKeyDown(event: React.KeyboardEvent<HTMLInputElement>, onEnter: () => void) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeFind();
+      return;
+    }
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    onEnter();
+  }
+
+  /* Ctrl/Cmd+F is caught here rather than on the window because focus is already
+     inside this card by the time it fires — on the window every Code card on the
+     board would open its own box. */
+  function handleContainerKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+    if (event.key !== "f" && event.key !== "F" && event.code !== "KeyF") return;
+    if (!showEditor) return;
+    event.preventDefault();
+    openFind();
+  }
+
   /* Cut with an empty selection takes the whole line. Widening the selection
      and letting the browser run its own cut keeps the clipboard and the native
      undo stack intact — the resulting input event flows through onChange. */
@@ -668,6 +818,11 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
   }
 
   function handleEditorKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Escape" && findOpen) {
+      event.preventDefault();
+      setFindOpen(false);
+      return;
+    }
     if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && (event.key === "x" || event.code === "KeyX")) {
       const input = event.currentTarget;
       // A real selection cuts natively; only an empty one grows to a line.
@@ -765,7 +920,7 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
   const lineNumbers = Array.from({ length: sources[language].split("\n").length }, (_value, index) => index + 1).join("\n");
 
   return (
-    <div className={styles.container}>
+    <div className={styles.container} onKeyDown={handleContainerKeyDown}>
       <div className={styles.toolbar}>
         <div className={styles.field}>
           <span>{STRINGS.language[locale]}</span>
@@ -821,9 +976,64 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
             </svg>
           </button>
         )}
+        {mode !== "interpreter" && (
+          <button
+            type="button"
+            className={styles.searchButton}
+            data-open={findOpen}
+            onClick={() => (findOpen ? closeFind() : openFind())}
+            disabled={!showEditor}
+            aria-label={STRINGS.search[locale]}
+            aria-pressed={findOpen}
+            title={STRINGS.search[locale]}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+              <g stroke="currentColor" strokeWidth="1" fill="none">
+                <circle cx="5.5" cy="5.5" r="4" />
+                <line x1="8.5" y1="8.5" x2="12.5" y2="12.5" strokeLinecap="square" />
+              </g>
+            </svg>
+          </button>
+        )}
       </div>
 
       <div className={`${styles.workspace} ${mode === "general" ? styles.generalWorkspace : ""}`}>
+        {/* Floats over the top-right corner of the content rather than pushing it
+            down, so the line the reader is on doesn't move when the box opens */}
+        {showEditor && findOpen && (
+          <div className={styles.findPanel} role="search" aria-label={STRINGS.search[locale]}>
+            <input
+              ref={findInputRef}
+              className={styles.findInput}
+              value={findText}
+              placeholder={STRINGS.find[locale]}
+              aria-label={STRINGS.find[locale]}
+              spellCheck={false}
+              onChange={(event) => setFindText(event.target.value)}
+              onKeyDown={(event) => handleFindFieldKeyDown(event, handleFindNext)}
+            />
+            <input
+              className={styles.findInput}
+              value={replaceText}
+              placeholder={STRINGS.replace[locale]}
+              aria-label={STRINGS.replace[locale]}
+              spellCheck={false}
+              onChange={(event) => setReplaceText(event.target.value)}
+              onKeyDown={(event) => handleFindFieldKeyDown(event, handleReplaceNext)}
+            />
+            <div className={styles.findButtons}>
+              <button type="button" className={styles.findButton} onClick={handleFindNext} disabled={!findText}>
+                {STRINGS.find[locale]}
+              </button>
+              <button type="button" className={styles.findButton} onClick={handleReplaceNext} disabled={!findText}>
+                {STRINGS.replaceNext[locale]}
+              </button>
+              <button type="button" className={styles.findButton} onClick={handleReplaceAll} disabled={!findText}>
+                {STRINGS.replaceAll[locale]}
+              </button>
+            </div>
+          </div>
+        )}
         {showEditor && (
           <section className={styles.editorPane}>
             <div className={styles.editorBody}>
