@@ -8,7 +8,11 @@ export const config = {
       items: [
         {
           key: { en: "Languages", ja: "言語", zh: "语言" },
-          value: { en: "HTML, JavaScript, Python", ja: "HTML、JavaScript、Python", zh: "HTML、JavaScript、Python" },
+          value: {
+            en: "HTML, JavaScript, JSON, Python",
+            ja: "HTML、JavaScript、JSON、Python",
+            zh: "HTML、JavaScript、JSON、Python",
+          },
         },
         {
           key: { en: "Isolation", ja: "分離", zh: "隔离" },
@@ -34,6 +38,7 @@ export const config = {
     sources: {
       html: "<!doctype html>\n<html>\n  <body>\n    <h1>Hello, Liveboard!</h1>\n  </body>\n</html>",
       javascript: "console.log(\"Hello, Liveboard!\");",
+      json: "{\n  \"name\": \"Liveboard\",\n  \"tags\": [\"code\", \"json\"]\n}",
       python: "print(\"Hello, Liveboard!\")",
     },
   },

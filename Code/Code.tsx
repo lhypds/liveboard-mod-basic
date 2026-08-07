@@ -3,10 +3,11 @@ import { useTranslation } from "react-i18next";
 import JavaScriptWorker from "./javascript.worker?worker";
 import PythonWorker from "./python.worker?worker";
 import { highlight, type Language } from "./highlight";
+import { formatSource, INDENT_WIDTH } from "./format";
 import styles from "./code.module.css";
 
 type Locale = "en" | "ja" | "zh";
-type Mode = "general" | "interpreter" | "preview";
+type Mode = "general" | "interpreter" | "preview" | "view";
 type OutputKind = "log" | "warn" | "error" | "result" | "status" | "input";
 
 type Sources = Record<Language, string>;
@@ -23,8 +24,6 @@ type WorkerMessage = {
   text?: string;
 };
 
-const INDENT = "  ";
-
 const DEFAULT_SOURCES: Sources = {
   html: `<!doctype html>
 <html>
@@ -33,6 +32,10 @@ const DEFAULT_SOURCES: Sources = {
   </body>
 </html>`,
   javascript: `console.log("Hello, Liveboard!");`,
+  json: `{
+  "name": "Liveboard",
+  "tags": ["code", "json"]
+}`,
   python: `print("Hello, Liveboard!")`,
 };
 
@@ -42,9 +45,11 @@ const STRINGS = {
   general: { en: "Console", ja: "コンソール", zh: "控制台" },
   interpreter: { en: "Interpreter", ja: "インタープリター", zh: "解释器" },
   preview: { en: "Preview", ja: "プレビュー", zh: "预览" },
+  view: { en: "View", ja: "ビュー", zh: "查看" },
   run: { en: "Run", ja: "実行", zh: "执行" },
   edit: { en: "Edit", ja: "編集", zh: "编辑" },
   reset: { en: "Reset", ja: "リセット", zh: "重置" },
+  format: { en: "Format code", ja: "コードを整形", zh: "格式化代码" },
   editor: { en: "Editor", ja: "エディター", zh: "编辑器" },
   console: { en: "Console", ja: "コンソール", zh: "控制台" },
   clearConsole: { en: "Clear console", ja: "コンソールをクリア", zh: "清空控制台" },
@@ -60,15 +65,22 @@ function getLocale(language: string): Locale {
 }
 
 function isLanguage(value: unknown): value is Language {
-  return value === "html" || value === "javascript" || value === "python";
+  return value === "html" || value === "javascript" || value === "json" || value === "python";
 }
 
 function isMode(value: unknown): value is Mode {
-  return value === "general" || value === "interpreter" || value === "preview";
+  return value === "general" || value === "interpreter" || value === "preview" || value === "view";
+}
+
+function defaultMode(language: Language): Mode {
+  if (language === "html") return "preview";
+  if (language === "json") return "view";
+  return "general";
 }
 
 function modeIsAvailable(mode: Mode, language: Language): boolean {
   if (language === "html") return mode === "preview";
+  if (language === "json") return mode === "view";
   if (language === "javascript") return mode === "general";
   return mode === "general" || mode === "interpreter";
 }
@@ -76,24 +88,24 @@ function modeIsAvailable(mode: Mode, language: Language): boolean {
 function normalizeComp(comp: CodeComp | undefined): { language: Language; mode: Mode; sources: Sources } {
   const language = isLanguage(comp?.language) ? comp.language : "html";
   const candidateMode = isMode(comp?.mode) ? comp.mode : "general";
-  const fallbackMode: Mode = language === "html" ? "preview" : "general";
-  const mode = modeIsAvailable(candidateMode, language) ? candidateMode : fallbackMode;
+  const mode = modeIsAvailable(candidateMode, language) ? candidateMode : defaultMode(language);
   return {
     language,
     mode,
     sources: {
       html: typeof comp?.sources?.html === "string" ? comp.sources.html : DEFAULT_SOURCES.html,
       javascript: typeof comp?.sources?.javascript === "string" ? comp.sources.javascript : DEFAULT_SOURCES.javascript,
+      json: typeof comp?.sources?.json === "string" ? comp.sources.json : DEFAULT_SOURCES.json,
       python: typeof comp?.sources?.python === "string" ? comp.sources.python : DEFAULT_SOURCES.python,
     },
   };
 }
 
-/* How much leading whitespace one Shift+Tab peels off a line: a full two-space
+/* How much leading whitespace one Shift+Tab peels off a line: a full indent
    level, a single tab from pasted code, or a lone stray space. */
-function outdentWidth(line: string): number {
+function outdentWidth(line: string, indent: string): number {
   if (line.startsWith("\t")) return 1;
-  if (line.startsWith(INDENT)) return INDENT.length;
+  if (line.startsWith(indent)) return indent.length;
   return line.startsWith(" ") ? 1 : 0;
 }
 
@@ -248,6 +260,7 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
   const comp = config.comp as CodeComp | undefined;
   const save = config._save as ((comp: Record<string, unknown>) => void) | undefined;
   const { language, mode, sources } = normalizeComp(comp);
+  const indent = " ".repeat(INDENT_WIDTH[language]);
   const [output, setOutput] = useState<OutputLine[]>([]);
   const [running, setRunning] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(false);
@@ -509,9 +522,14 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
     if (mode === "interpreter") setInterpreterDraft("");
   }
 
+  function handleFormat() {
+    const next = formatSource(sources[language], language);
+    if (next !== sources[language]) updateSource(next);
+  }
+
   function handleLanguageChange(next: Language) {
     stopWorkers();
-    const nextMode: Mode = next === "html" ? "preview" : "general";
+    const nextMode = defaultMode(next);
     setPreviewVisible(false);
     setOutput([]);
     setInterpreterDraft("");
@@ -534,9 +552,15 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
   }
 
   function handleEditorKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.altKey && event.shiftKey && (event.key === "F" || event.key === "f" || event.code === "KeyF")) {
+      event.preventDefault();
+      handleFormat();
+      return;
+    }
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
-      handleRun();
+      if (language === "json") handleFormat();
+      else handleRun();
       return;
     }
     if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey) return;
@@ -545,12 +569,12 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
     const text = input.value;
     const { selectionStart, selectionEnd } = input;
 
-    // Plain Tab inside a single line stays a literal two-space insert; only a
+    // Plain Tab inside a single line stays a literal indent insert; only a
     // multi-line selection (and any Shift+Tab) shifts whole lines.
     const spansLines = text.slice(selectionStart, selectionEnd).includes("\n");
     if (!event.shiftKey && !spansLines) {
-      const next = `${text.slice(0, selectionStart)}${INDENT}${text.slice(selectionEnd)}`;
-      const cursor = selectionStart + INDENT.length;
+      const next = `${text.slice(0, selectionStart)}${indent}${text.slice(selectionEnd)}`;
+      const cursor = selectionStart + indent.length;
       updateSource(next);
       window.requestAnimationFrame(() => input.setSelectionRange(cursor, cursor));
       return;
@@ -567,10 +591,10 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
     let firstDelta = 0;
     let totalDelta = 0;
     const lines = text.slice(blockStart, blockEnd).split("\n").map((line, index) => {
-      const delta = event.shiftKey ? -outdentWidth(line) : INDENT.length;
+      const delta = event.shiftKey ? -outdentWidth(line, indent) : indent.length;
       if (index === 0) firstDelta = delta;
       totalDelta += delta;
-      return delta < 0 ? line.slice(-delta) : delta > 0 ? INDENT + line : line;
+      return delta < 0 ? line.slice(-delta) : delta > 0 ? indent + line : line;
     });
     if (totalDelta === 0) return;
 
@@ -603,8 +627,12 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
     persist(language, mode, next);
   }
 
-  const availableModes: Mode[] = language === "html" ? ["preview"] : language === "python" ? ["general", "interpreter"] : ["general"];
+  const availableModes: Mode[] =
+    language === "html" ? ["preview"] : language === "json" ? ["view"] : language === "python" ? ["general", "interpreter"] : ["general"];
   const showEditor = mode !== "interpreter" && !(mode === "preview" && previewVisible);
+  /* JSON is inert: nothing to execute and nothing to reset back to, so the
+     format icon is the only action it offers. */
+  const showRunButton = mode !== "interpreter" && language !== "json";
   const showConsole = mode === "general" || mode === "interpreter";
   const showPreview = mode === "preview" && previewVisible;
   const lineNumbers = Array.from({ length: sources[language].split("\n").length }, (_value, index) => index + 1).join("\n");
@@ -619,6 +647,7 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
             options={[
               { value: "html", label: "HTML" },
               { value: "javascript", label: "JavaScript" },
+              { value: "json", label: "JSON" },
               { value: "python", label: "Python" },
             ]}
             disabled={running}
@@ -638,13 +667,33 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
         </div>
         <div className={styles.toolbarSpacer} />
         {mode !== "interpreter" && (
-          <button type="button" className={styles.runButton} onClick={handleRun} disabled={running}>
-            {mode === "preview" && previewVisible ? STRINGS.edit[locale] : STRINGS.run[locale]}
+          <button
+            type="button"
+            className={styles.formatButton}
+            onClick={handleFormat}
+            disabled={running || !showEditor}
+            aria-label={STRINGS.format[locale]}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+              <g stroke="currentColor" strokeWidth="1" strokeLinecap="square">
+                <line x1="1" y1="1.5" x2="13" y2="1.5" />
+                <line x1="5" y1="5.5" x2="13" y2="5.5" />
+                <line x1="5" y1="9.5" x2="13" y2="9.5" />
+                <line x1="1" y1="13.5" x2="13" y2="13.5" />
+              </g>
+            </svg>
           </button>
         )}
-        <button type="button" className={styles.resetButton} onClick={handleReset} disabled={running}>
-          {STRINGS.reset[locale]}
-        </button>
+        {showRunButton && (
+          <button type="button" className={styles.runButton} onClick={handleRun} disabled={running}>
+            {mode === "preview" ? (previewVisible ? STRINGS.edit[locale] : STRINGS.preview[locale]) : STRINGS.run[locale]}
+          </button>
+        )}
+        {language !== "json" && (
+          <button type="button" className={styles.resetButton} onClick={handleReset} disabled={running}>
+            {STRINGS.reset[locale]}
+          </button>
+        )}
       </div>
 
       <div className={`${styles.workspace} ${mode === "general" ? styles.generalWorkspace : ""}`}>
