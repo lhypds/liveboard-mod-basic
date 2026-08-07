@@ -43,8 +43,8 @@ export default function Note({ config }: { config: Record<string, unknown> }) {
     persist(next);
   }
 
-  // Re-assert the caret after a Tab edit: React rewrites the textarea's value on
-  // the following render, which would otherwise drop the selection to the end.
+  // Re-assert the caret after a keyboard edit: React rewrites the textarea's value
+  // on the following render, which would otherwise drop the selection to the end.
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pendingSelectionRef = useRef<[number, number] | null>(null);
   useLayoutEffect(() => {
@@ -54,48 +54,151 @@ export default function Note({ config }: { config: Record<string, unknown> }) {
     textareaRef.current.setSelectionRange(selection[0], selection[1]);
   });
 
-  // Tab indents every line the selection touches, Shift+Tab unindents them.
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key !== "Tab" || e.altKey || e.ctrlKey || e.metaKey) return;
-    e.preventDefault();
-
-    const el = e.currentTarget;
+  // Every shortcut edits through here: execCommand keeps the browser's native undo
+  // stack, and the resulting input event flows into handleChange as usual.
+  function replaceRange(
+    el: HTMLTextAreaElement,
+    start: number,
+    end: number,
+    replacement: string,
+    selection: [number, number],
+  ) {
     const text = el.value;
-    const { selectionStart, selectionEnd } = el;
+    // A no-op edit renders nothing, so the pending selection would leak into a
+    // later render — just move the caret and stop.
+    if (replacement === text.slice(start, end)) {
+      el.setSelectionRange(selection[0], selection[1]);
+      return;
+    }
 
-    // Grow the range to whole lines so the edit always starts at column 0. A
-    // selection dragged onto the start of the next line stops at the newline,
-    // so that untouched line is left alone.
-    const rangeEnd =
-      selectionEnd > selectionStart && text[selectionEnd - 1] === "\n" ? selectionEnd - 1 : selectionEnd;
-    const blockStart = text.lastIndexOf("\n", selectionStart - 1) + 1;
-    const newlineAfter = text.indexOf("\n", rangeEnd);
-    const blockEnd = newlineAfter === -1 ? text.length : newlineAfter;
-
-    const lines = text.slice(blockStart, blockEnd).split("\n");
-    let firstDelta = 0;
-    let totalDelta = 0;
-    const nextLines = lines.map((line, i) => {
-      // Unindent only strips a full two-space level, matching what Tab added.
-      const delta = e.shiftKey ? (line.startsWith(INDENT) ? -INDENT.length : 0) : INDENT.length;
-      if (i === 0) firstDelta = delta;
-      totalDelta += delta;
-      return delta < 0 ? line.slice(INDENT.length) : delta > 0 ? INDENT + line : line;
-    });
-    if (totalDelta === 0) return;
-
-    const nextStart = Math.max(blockStart, selectionStart + firstDelta);
-    const nextEnd = Math.max(nextStart, selectionEnd + totalDelta);
-    pendingSelectionRef.current = [nextStart, nextEnd];
-
-    // Replace through execCommand so the browser's native undo stack keeps the
-    // edit; the resulting input event flows into handleChange as usual.
-    el.setSelectionRange(blockStart, blockEnd);
-    const nextBlock = nextLines.join("\n");
-    if (!document.execCommand("insertText", false, nextBlock)) {
-      const next = text.slice(0, blockStart) + nextBlock + text.slice(blockEnd);
+    pendingSelectionRef.current = selection;
+    el.setSelectionRange(start, end);
+    const ok = replacement
+      ? document.execCommand("insertText", false, replacement)
+      : document.execCommand("delete");
+    if (!ok) {
+      const next = text.slice(0, start) + replacement + text.slice(end);
       setValue(next);
       persist(next);
+    }
+  }
+
+  // lastIndexOf clamps a negative fromIndex to 0 instead of reporting no match, so
+  // column 0 needs answering up front — otherwise a leading newline is found.
+  function lineStartAt(text: string, pos: number) {
+    return pos <= 0 ? 0 : text.lastIndexOf("\n", pos - 1) + 1;
+  }
+
+  // The whole-line block the selection touches, always starting at column 0. A
+  // selection dragged onto the start of the next line stops at the newline, so
+  // that untouched line is left alone.
+  function lineBlock(text: string, selectionStart: number, selectionEnd: number) {
+    const rangeEnd =
+      selectionEnd > selectionStart && text[selectionEnd - 1] === "\n" ? selectionEnd - 1 : selectionEnd;
+    const newlineAfter = text.indexOf("\n", rangeEnd);
+    return {
+      start: lineStartAt(text, selectionStart),
+      end: newlineAfter === -1 ? text.length : newlineAfter,
+    };
+  }
+
+  // Tab indents every line the selection touches, Shift+Tab unindents them.
+  function indentLines(el: HTMLTextAreaElement, unindent: boolean) {
+    const text = el.value;
+    const { selectionStart, selectionEnd } = el;
+    const { start, end } = lineBlock(text, selectionStart, selectionEnd);
+
+    let firstDelta = 0;
+    let totalDelta = 0;
+    const nextLines = text
+      .slice(start, end)
+      .split("\n")
+      .map((line, i) => {
+        // Unindent only strips a full two-space level, matching what Tab added.
+        const delta = unindent ? (line.startsWith(INDENT) ? -INDENT.length : 0) : INDENT.length;
+        if (i === 0) firstDelta = delta;
+        totalDelta += delta;
+        return delta < 0 ? line.slice(INDENT.length) : delta > 0 ? INDENT + line : line;
+      });
+    if (totalDelta === 0) return;
+
+    const nextStart = Math.max(start, selectionStart + firstDelta);
+    const nextEnd = Math.max(nextStart, selectionEnd + totalDelta);
+    replaceRange(el, start, end, nextLines.join("\n"), [nextStart, nextEnd]);
+  }
+
+  // Ctrl+X cuts the selection, or the whole line when the caret is collapsed — the
+  // way an editor does. Both halves are handled here rather than left to the browser:
+  // macOS binds cut to Cmd+X, so a plain Ctrl+X would otherwise be a dead key.
+  function cut(el: HTMLTextAreaElement) {
+    const text = el.value;
+
+    if (el.selectionStart !== el.selectionEnd) {
+      const { selectionStart, selectionEnd } = el;
+      navigator.clipboard?.writeText(text.slice(selectionStart, selectionEnd)).catch(() => {});
+      replaceRange(el, selectionStart, selectionEnd, "", [selectionStart, selectionStart]);
+      return;
+    }
+
+    const { start, end } = lineBlock(text, el.selectionStart, el.selectionEnd);
+    // Take the line's trailing newline with it; on the last line take the leading
+    // one instead, so cutting never leaves a blank row behind.
+    const cutEnd = end < text.length ? end + 1 : end;
+    const cutStart = cutEnd === end && start > 0 ? start - 1 : start;
+    navigator.clipboard?.writeText(text.slice(start, end) + "\n").catch(() => {});
+
+    // Keep the column: the caret lands on whichever line moved into this slot.
+    const column = el.selectionStart - start;
+    const next = text.slice(0, cutStart) + text.slice(cutEnd);
+    const lineStart = lineStartAt(next, cutStart);
+    const newlineAfter = next.indexOf("\n", lineStart);
+    const lineEnd = newlineAfter === -1 ? next.length : newlineAfter;
+    const caret = Math.min(lineStart + column, lineEnd);
+
+    replaceRange(el, cutStart, cutEnd, "", [caret, caret]);
+  }
+
+  // Option/Alt + Up/Down swaps the selected line block with its neighbour.
+  function moveLines(el: HTMLTextAreaElement, direction: -1 | 1) {
+    const text = el.value;
+    const { selectionStart, selectionEnd } = el;
+    const { start, end } = lineBlock(text, selectionStart, selectionEnd);
+    const block = text.slice(start, end);
+
+    if (direction < 0) {
+      if (start === 0) return;
+      const aboveStart = lineStartAt(text, start - 1);
+      const above = text.slice(aboveStart, start - 1);
+      const shift = -(above.length + 1);
+      replaceRange(el, aboveStart, end, `${block}\n${above}`, [selectionStart + shift, selectionEnd + shift]);
+    } else {
+      if (end === text.length) return;
+      const newlineAfter = text.indexOf("\n", end + 1);
+      const belowEnd = newlineAfter === -1 ? text.length : newlineAfter;
+      const below = text.slice(end + 1, belowEnd);
+      const shift = below.length + 1;
+      replaceRange(el, start, belowEnd, `${below}\n${block}`, [selectionStart + shift, selectionEnd + shift]);
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    const el = e.currentTarget;
+
+    if (e.key === "x" && e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      cut(el);
+      return;
+    }
+
+    if ((e.key === "ArrowUp" || e.key === "ArrowDown") && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      e.preventDefault();
+      moveLines(el, e.key === "ArrowUp" ? -1 : 1);
+      return;
+    }
+
+    if (e.key === "Tab" && !e.altKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      indentLines(el, e.shiftKey);
     }
   }
 

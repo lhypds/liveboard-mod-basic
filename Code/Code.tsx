@@ -17,6 +17,8 @@ type CodeComp = {
   sources?: Partial<Sources>;
 };
 type OutputLine = { id: number; kind: OutputKind; text: string };
+/* What the board's Generate button is pointed at; see the registration below. */
+type GenerateTarget = { content: () => string; prompt: string; onGenerated: (next: string) => void };
 type DropdownOption = { value: string; label: string };
 type WorkerMessage = {
   id: number;
@@ -59,6 +61,20 @@ const STRINGS = {
   htmlRendered: { en: "HTML rendered.", ja: "HTML を描画しました。", zh: "HTML 已渲染。" },
   previewTitle: { en: "HTML preview", ja: "HTML プレビュー", zh: "HTML 预览" },
 } satisfies Record<string, Record<Locale, string>>;
+
+/* The standing description sent with every Generate, so the model knows what it is
+   being handed before it reads the instruction. Model-facing, so it stays in English
+   whatever language the card is showing, and it describes the runtime rather than
+   just the syntax — code that reaches for the network or the DOM won't run here. */
+const GENERATE_PROMPT: Record<Language, string> = {
+  html: "A self-contained HTML document rendered in a sandboxed iframe. Inline any CSS and JavaScript it needs and don't request anything over the network; console.log reaches the card's console.",
+  javascript: "A JavaScript program run in a Web Worker: no DOM, no network. console.log is the only way it shows anything.",
+  json: "A JSON document, shown as data rather than run. It has to parse.",
+  python: "A Python program run under Pyodide in a Web Worker: the standard library and what Pyodide bundles, no network. print is the only way it shows anything.",
+};
+
+const GENERATE_RULE =
+  "Answer with the source alone — no markdown fences, no commentary — keeping its existing style and indentation unless the instruction says otherwise.";
 
 function getLocale(language: string): Locale {
   return language === "ja" || language === "zh" ? language : "en";
@@ -395,6 +411,30 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, [appendOutput]);
+
+  /* A rewrite lands in the source of whichever language the card is showing, not in
+     one fixed field, so the board can't reach it the way it reaches a note's text:
+     the card says what to read and where to put it, and registering that is also
+     what puts the Generate button in its header. The target below outlives the
+     render that made it — a whole run streams through it — so it reads what it
+     needs from this ref rather than from that render's closure. */
+  const liveRef = useRef({ source: sources[language], update: updateSource });
+  useEffect(() => {
+    liveRef.current = { source: sources[language], update: updateSource };
+  });
+
+  useEffect(() => {
+    const setGenerate = config._setGenerate as ((target: GenerateTarget | null) => void) | undefined;
+    // The interpreter shows no editor, so a rewrite would land somewhere off screen
+    if (mode === "interpreter") return;
+    setGenerate?.({
+      content: () => liveRef.current.source,
+      prompt: `${GENERATE_PROMPT[language]} ${GENERATE_RULE}`,
+      onGenerated: (next) => liveRef.current.update(next),
+    });
+    return () => setGenerate?.(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language, mode]);
 
   function persist(nextLanguage: Language, nextMode: Mode, nextSources: Sources) {
     save?.({ ...comp, language: nextLanguage, mode: nextMode, sources: nextSources });

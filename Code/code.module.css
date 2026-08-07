@@ -1,10 +1,11 @@
 .container {
+  --toolbar-gap: 6px;
   box-sizing: border-box;
   width: calc(100% + 10px);
   height: calc(100% + 10px);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--toolbar-gap);
   min-height: 0;
   overflow: hidden;
   background: #fff;
@@ -18,6 +19,24 @@
   align-items: center;
   gap: 8px;
   min-height: 26px;
+}
+
+/* The board veils a busy card — refreshing, or generating — from the top of its
+   content down, stopping 1px inside the border of whatever box the module draws its
+   content in. That assumes the box starts where the card's content does; here it
+   starts below this toolbar, so the veil crosses the workspace frame's top edge and
+   washes the line out. The toolbar is the one thing standing above the veil, so
+   hanging that edge off its own bottom draws the line back on top — and neither
+   side has to know how tall the other is. */
+.toolbar::after {
+  content: "";
+  position: absolute;
+  top: calc(100% + var(--toolbar-gap));
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #000;
+  pointer-events: none;
 }
 
 .field {
