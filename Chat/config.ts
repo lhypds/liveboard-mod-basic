@@ -17,9 +17,9 @@ export const config = {
         {
           key: { en: "Account", ja: "アカウント", zh: "账号" },
           value: {
-            en: "Whoever the CLI is logged in as on the bridge; `:login <user> <password>` to change",
-            ja: "ブリッジ上で CLI がログイン中のユーザー。変更は `:login <user> <password>`",
-            zh: "桥接服务上 CLI 已登录的用户；用 `:login <user> <password>` 切换",
+            en: "The account saved in Profile → SC Account, signed in automatically; `:login <user> <password>` to change",
+            ja: "プロフィール → SC アカウントに保存されたアカウントで自動ログイン。変更は `:login <user> <password>`",
+            zh: "自动登录“个人资料 → SC 账号”中保存的账号；用 `:login <user> <password>` 切换",
           },
         },
       ],

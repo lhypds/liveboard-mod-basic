@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { getScAccount } from "@utils/sc";
 import {
   DEFAULT_BRIDGE_URL,
   connectSc,
@@ -129,10 +130,13 @@ export default function Chat({ config }: { config: Record<string, unknown> }) {
   // outlived its CLI (dev restart, idle timeout) keeps the same conversation.
   const wantedScSessionRef = useRef(comp?.scSession ?? "");
   const attachedRef = useRef(false);
+  // Whether the saved simple-ai account has been signed in on this CLI process yet.
+  const loggedInRef = useRef(false);
 
   useEffect(() => {
     if (!bridgeUrl) return;
     attachedRef.current = false;
+    loggedInRef.current = false;
     const mark = (state: "live" | "unavailable") => setConn({ url: bridgeUrl, state });
 
     const client = connectSc(bridgeUrl, bridgeSession, {
@@ -153,6 +157,23 @@ export default function Chat({ config }: { config: Record<string, unknown> }) {
       // the only proof coming, since the banner went to the page that has since been reloaded.
       onState: (next) => {
         mark("live");
+
+        // Sign in as the account saved in the browser (Profile → SC Account), which is
+        // what the reader's own conversations belong to — a CLI on the bridge otherwise
+        // stays whoever it was last logged in as, which is nobody on a fresh one. Once
+        // per CLI process, and before the attach below: `:login` re-initialises the
+        // CLI's session memory, so the other order would empty the conversation it has
+        // just re-attached. With no password saved the card is signed in as whatever the
+        // bridge's CLI already is, exactly as it was before.
+        if (!loggedInRef.current) {
+          loggedInRef.current = true;
+          const { username, password } = getScAccount();
+          if (username && password) {
+            // login() reads the state it ends up on, so this same handler runs again.
+            void client.login(username, password);
+            return;
+          }
+        }
 
         const wanted = wantedScSessionRef.current;
         if (wanted && next.scSession && next.scSession !== wanted && !attachedRef.current) {

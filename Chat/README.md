@@ -71,9 +71,20 @@ a line written before the CLI reaches its first prompt is dropped, so the openin
 asked again when the startup banner appears; and React mounts a component twice in dev, so a
 duplicate answer is swallowed for a moment after the first.
 
-The card is signed in as whoever the CLI is logged in as on the bridge. Type
-`:login <username> <password>` into the card if it is not — any `:` command is forwarded to
-the CLI as typed. Passwords are masked in the saved scrollback, never in the CLI.
+Account
+-------
+
+The card signs its CLI in by itself, as the simple-ai account saved in the browser — the one
+**Profile → SC Account** stores, username and password both. That happens once per CLI
+process, before any `:session attach`, because `:login` re-initialises the CLI's session
+memory and the other order would empty the conversation just re-attached. A successful login
+stays out of the box with the rest of the plumbing; a failed one is left on screen, since a
+card that could not sign in cannot answer either.
+
+With no account saved, the card is signed in as whoever the CLI on the bridge already is.
+Type `:login <username> <password>` into the card to change it — any `:` command is
+forwarded to the CLI as typed. Passwords are masked in the saved scrollback, never in the
+CLI.
 
 
 Config

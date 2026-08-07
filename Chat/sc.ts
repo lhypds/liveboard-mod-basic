@@ -48,6 +48,8 @@ export type ScHandlers = {
 
 export type ScClient = {
   send: (text: string) => Promise<{ error?: string }>;
+  /** Sign the CLI in as a simple-ai user (`:login`) — the only login the CLI speaks. */
+  login: (username: string, password: string) => Promise<{ state?: ScState }>;
   /** Put the CLI back on a saved conversation. `missing` means there is no such conversation. */
   attach: (scSession: string) => Promise<{ attached?: boolean; missing?: boolean; state?: ScState }>;
   /** Start a fresh conversation (`:reset`), which gives the card a new session id. */
@@ -62,6 +64,13 @@ const BANNER = ":help for help.";
 
 /** `:session attach <id>` worked. Its other failures are left visible on purpose. */
 const ATTACHED = /^Session \(id:\d+\) attached\./m;
+
+// `:login` worked — the block also carries the CLI's own notes about it ("User is set to
+// …", "Session initializing…"), all of it plumbing for a login the reader did not type.
+// A failed login is left visible: a card that could not sign in cannot answer either, and
+// the reader is the only one who can fix that. Only ever tested against a block the client
+// is waiting on, so a `:login` typed into the card still shows its answer.
+const LOGGED_IN = /^You're logged in as /m;
 
 // What the CLI answers when the conversation the card asked for is not on the server any
 // more — deleted, or never there because the board came back against a different one. The
@@ -190,9 +199,9 @@ export function connectSc(baseUrl: string, session: string, handlers: ScHandlers
       return;
     }
 
-    // The rest of our own commands' output: a successful attach, or the bare prompt a
-    // command with no output leaves. Dropped — the card shows the session, not the plumbing.
-    if (ATTACHED.test(text) || isBare(text)) return;
+    // The rest of our own commands' output: a successful attach or login, or the bare prompt
+    // a command with no output leaves. Dropped — the card shows the session, not the plumbing.
+    if (ATTACHED.test(text) || LOGGED_IN.test(text) || isBare(text)) return;
 
     // Somebody else's output — the startup banner, or a reply to whatever was typed. It goes
     // on screen, and we keep waiting for our own answer.
@@ -217,6 +226,13 @@ export function connectSc(baseUrl: string, session: string, handlers: ScHandlers
 
   return {
     send,
+    login: async (username, password) => {
+      // Awaited in turn, as in attach(): the login goes in ahead of the `:info` that
+      // reads what the CLI ended up on.
+      await send(`:login ${username} ${password}`);
+      const state = await readState();
+      return { state: state ?? undefined };
+    },
     attach: async (scSession) => {
       missing = false;
       // Awaited in turn: the bridge writes each line as it arrives, so this is what keeps
