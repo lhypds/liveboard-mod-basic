@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   DEFAULT_BRIDGE_URL,
@@ -247,10 +247,28 @@ export default function Chat({ config }: { config: Record<string, unknown> }) {
     if (el.selectionStart === el.selectionEnd) el.setSelectionRange(el.value.length, el.value.length);
   }, [log]);
 
-  useEffect(() => {
+  const pinToBottom = () => {
     const el = areaRef.current;
     if (el && stickRef.current) el.scrollTop = el.scrollHeight;
-  }, [log, draft]);
+  };
+
+  // Before the paint, not after: a reload restores the scrollback mid-session, and the
+  // newest lines are the ones it should come back on — not the oldest, and not the top of
+  // the box for a frame first.
+  useLayoutEffect(pinToBottom, [log, draft]);
+
+  // The box changing size moves the bottom out from under the view: a resized card re-wraps
+  // every line, and on a reload the card is laid out after this mounts. Both leave the
+  // terminal stranded above the newest output unless it is put back. Reads refs only, so the
+  // first render's closure is as good as any later one. (Safari 12 has no ResizeObserver —
+  // the card is then pinned on mount alone, as it was before.)
+  useLayoutEffect(() => {
+    const el = areaRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(pinToBottom);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   function handleScroll() {
     const el = areaRef.current;

@@ -551,7 +551,65 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
     persist(language, mode, next);
   }
 
+  /* Cut with an empty selection takes the whole line. Widening the selection
+     and letting the browser run its own cut keeps the clipboard and the native
+     undo stack intact — the resulting input event flows through onChange. */
+  function selectLineForCut(input: HTMLTextAreaElement) {
+    const text = input.value;
+    const caret = input.selectionStart;
+    const lineStart = text.lastIndexOf("\n", caret - 1) + 1;
+    const newlineAfter = text.indexOf("\n", caret);
+    // Swallow the trailing newline, or on the last line the leading one, so
+    // cutting never leaves a blank line where the line used to be.
+    if (newlineAfter === -1) input.setSelectionRange(Math.max(0, lineStart - 1), text.length);
+    else input.setSelectionRange(lineStart, newlineAfter + 1);
+  }
+
+  /* Swap the caret's line — or every line the selection touches — with its
+     neighbour above or below, carrying the selection along with it. */
+  function moveLines(input: HTMLTextAreaElement, direction: -1 | 1) {
+    const text = input.value;
+    const { selectionStart, selectionEnd } = input;
+    const rangeEnd = selectionEnd > selectionStart && text[selectionEnd - 1] === "\n" ? selectionEnd - 1 : selectionEnd;
+    const blockStart = text.lastIndexOf("\n", selectionStart - 1) + 1;
+    const newlineAfter = text.indexOf("\n", rangeEnd);
+    const blockEnd = newlineAfter === -1 ? text.length : newlineAfter;
+    const block = text.slice(blockStart, blockEnd);
+
+    let next: string;
+    let delta: number;
+    if (direction < 0) {
+      if (blockStart === 0) return;
+      const aboveStart = blockStart >= 2 ? text.lastIndexOf("\n", blockStart - 2) + 1 : 0;
+      const above = text.slice(aboveStart, blockStart - 1);
+      next = `${text.slice(0, aboveStart)}${block}\n${above}${text.slice(blockEnd)}`;
+      delta = aboveStart - blockStart;
+    } else {
+      if (blockEnd === text.length) return;
+      const belowStart = blockEnd + 1;
+      const belowNewline = text.indexOf("\n", belowStart);
+      const belowEnd = belowNewline === -1 ? text.length : belowNewline;
+      const below = text.slice(belowStart, belowEnd);
+      next = `${text.slice(0, blockStart)}${below}\n${block}${text.slice(belowEnd)}`;
+      delta = below.length + 1;
+    }
+
+    updateSource(next);
+    window.requestAnimationFrame(() => input.setSelectionRange(selectionStart + delta, selectionEnd + delta));
+  }
+
   function handleEditorKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && (event.key === "x" || event.code === "KeyX")) {
+      const input = event.currentTarget;
+      // A real selection cuts natively; only an empty one grows to a line.
+      if (input.selectionStart === input.selectionEnd) selectLineForCut(input);
+      return;
+    }
+    if (event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+      event.preventDefault();
+      moveLines(event.currentTarget, event.key === "ArrowUp" ? -1 : 1);
+      return;
+    }
     if (event.altKey && event.shiftKey && (event.key === "F" || event.key === "f" || event.code === "KeyF")) {
       event.preventDefault();
       handleFormat();
@@ -666,6 +724,16 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
           />
         </div>
         <div className={styles.toolbarSpacer} />
+        {showRunButton && (
+          <button type="button" className={styles.runButton} onClick={handleRun} disabled={running}>
+            {mode === "preview" ? (previewVisible ? STRINGS.edit[locale] : STRINGS.preview[locale]) : STRINGS.run[locale]}
+          </button>
+        )}
+        {language !== "json" && (
+          <button type="button" className={styles.resetButton} onClick={handleReset} disabled={running}>
+            {STRINGS.reset[locale]}
+          </button>
+        )}
         {mode !== "interpreter" && (
           <button
             type="button"
@@ -682,16 +750,6 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
                 <line x1="1" y1="13.5" x2="13" y2="13.5" />
               </g>
             </svg>
-          </button>
-        )}
-        {showRunButton && (
-          <button type="button" className={styles.runButton} onClick={handleRun} disabled={running}>
-            {mode === "preview" ? (previewVisible ? STRINGS.edit[locale] : STRINGS.preview[locale]) : STRINGS.run[locale]}
-          </button>
-        )}
-        {language !== "json" && (
-          <button type="button" className={styles.resetButton} onClick={handleReset} disabled={running}>
-            {STRINGS.reset[locale]}
           </button>
         )}
       </div>
