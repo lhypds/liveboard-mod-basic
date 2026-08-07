@@ -48,8 +48,8 @@ export type ScHandlers = {
 
 export type ScClient = {
   send: (text: string) => Promise<{ error?: string }>;
-  /** Put the CLI back on a saved conversation. */
-  attach: (scSession: string) => Promise<{ attached?: boolean; state?: ScState }>;
+  /** Put the CLI back on a saved conversation. `missing` means there is no such conversation. */
+  attach: (scSession: string) => Promise<{ attached?: boolean; missing?: boolean; state?: ScState }>;
   /** Start a fresh conversation (`:reset`), which gives the card a new session id. */
   reset: () => Promise<{ state?: ScState }>;
   close: () => void;
@@ -60,8 +60,13 @@ export type ScClient = {
 // floor, which is why the first `:info` has to be asked again here.
 const BANNER = ":help for help.";
 
-/** `:session attach <id>` worked. Its failures are left visible on purpose. */
+/** `:session attach <id>` worked. Its other failures are left visible on purpose. */
 const ATTACHED = /^Session \(id:\d+\) attached\./m;
+
+// What the CLI answers when the conversation the card asked for is not on the server any
+// more — deleted, or never there because the board came back against a different one. The
+// id the card saved is then unusable for good, which is the card's cue to start over.
+const MISSING = /^Session not found\./m;
 
 // An answer that never comes must not hold the CLI's output back for good.
 const ANSWER_TIMEOUT = 30000;
@@ -103,6 +108,9 @@ export function connectSc(baseUrl: string, session: string, handlers: ScHandlers
   let waiting = false;
   let held = "";
   let timer = 0;
+  // Whether the attach in flight has been answered with "no such session". Read by attach()
+  // once its `:info` comes back, since that answer is what tells it the attach is over.
+  let missing = false;
   let waiters: Array<(state: ScState | null) => void> = [];
 
   const flush = () => {
@@ -174,6 +182,14 @@ export function connectSc(baseUrl: string, session: string, handlers: ScHandlers
       return;
     }
 
+    // A conversation the server does not have. Noted for attach(), which is what asked, and
+    // kept off the screen with the rest of the plumbing: the card recovers by starting a new
+    // conversation, so this is nothing the reader has to read or do anything about.
+    if (MISSING.test(text)) {
+      missing = true;
+      return;
+    }
+
     // The rest of our own commands' output: a successful attach, or the bare prompt a
     // command with no output leaves. Dropped — the card shows the session, not the plumbing.
     if (ATTACHED.test(text) || isBare(text)) return;
@@ -202,11 +218,12 @@ export function connectSc(baseUrl: string, session: string, handlers: ScHandlers
   return {
     send,
     attach: async (scSession) => {
+      missing = false;
       // Awaited in turn: the bridge writes each line as it arrives, so this is what keeps
       // the attach ahead of the `:info` that reads the result.
       await send(`:session attach ${scSession}`);
       const state = await readState();
-      return { attached: state?.scSession === scSession, state: state ?? undefined };
+      return { attached: state?.scSession === scSession, missing, state: state ?? undefined };
     },
     reset: async () => {
       await send(":reset");

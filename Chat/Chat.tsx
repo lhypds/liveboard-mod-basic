@@ -158,7 +158,12 @@ export default function Chat({ config }: { config: Record<string, unknown> }) {
         if (wanted && next.scSession && next.scSession !== wanted && !attachedRef.current) {
           attachedRef.current = true;
           // attach() reports the state it ends up on, so this same handler runs again.
-          void client.attach(wanted);
+          void client.attach(wanted).then((res) => {
+            // The saved conversation is gone from the server, so it is never coming back:
+            // the card starts a new one by itself rather than keeping a dead id and a
+            // scrollback the model on the other end has no memory of. Same as Reset.
+            if (res?.missing) void newSession();
+          });
           return;
         }
         attachedRef.current = true;

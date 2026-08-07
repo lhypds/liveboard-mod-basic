@@ -92,3 +92,9 @@ What the card keeps in its `comp` config, so it can come back as it was:
 `scSession` is the one that matters: bridges drop an idle CLI after a while, so when the card
 comes back to a new one it re-attaches with `:session attach <id>` and the conversation carries
 on where it left off. Reset stores the new id in its place.
+
+When that attach answers `Session not found.` the conversation is gone from the simple-ai
+server, so no later attempt can bring it back — the card starts a new one by itself, clearing
+the screen to a fresh prompt exactly as Reset does, rather than keeping a dead id and a
+scrollback the model no longer remembers. The failure is plumbing, so it stays out of the box;
+a `:session attach` you type yourself is your own command and still shows its answer.
