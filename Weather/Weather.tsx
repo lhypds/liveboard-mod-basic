@@ -3,11 +3,11 @@ import { useTranslation } from "react-i18next";
 import {
   geocodeLocation,
   searchLocations,
-  primeGeocodeCache,
   LocationNotFoundError,
   fetchCurrentWeather,
   fetchMonthlyNormals,
   monthlyNormalsFromFile,
+  normalsPeriod,
   type GeocodeResult,
   type CurrentWeather,
   type MonthlyNormals,
@@ -38,6 +38,57 @@ const DEFAULT_REFRESH_MINUTES = 15;
 const SUGGESTION_COUNT = 6;
 const SEARCH_DEBOUNCE_MS = 250;
 const MIN_QUERY_LENGTH = 2;
+
+// What the card carries over between loads, kept in its own config (comp.cache) so it travels with
+// an exported or server-synced layout instead of sitting in this browser's localStorage. Two things
+// earn their place: the place the location resolved to — a pick from the dropdown has to keep its
+// exact coordinates, or "Springfield" would silently snap back to whichever one the geocoder ranks
+// first — and, only for locations the Wolfram file has no baseline for, the monthly averages, whose
+// live fetch is ten years of daily data. Everything else is re-fetched.
+type PlaceCache = {
+  // The location text this was resolved from: editing the location invalidates the whole entry.
+  query: string;
+  lat: number;
+  lon: number;
+  name: string;
+  timezone: string;
+  normals?: {
+    // Mean daily temperature per calendar month, °C at the 0.1 the card actually displays.
+    byMonth: Array<number | null>;
+    // Doubles as the freshness check — a new complete year makes the baseline stale.
+    startYear: number;
+    endYear: number;
+  };
+};
+
+function placeCache(query: string, geo: GeocodeResult): PlaceCache {
+  return { query, lat: geo.lat, lon: geo.lon, name: geo.name, timezone: geo.timezone };
+}
+
+// Only good for the location it was resolved from; a hand-edited or older config counts as absent.
+function readPlaceCache(cache: unknown, location: string): PlaceCache | null {
+  const entry = cache as PlaceCache | undefined;
+  if (!entry || typeof entry.query !== "string" || typeof entry.name !== "string") return null;
+  if (typeof entry.lat !== "number" || typeof entry.lon !== "number" || typeof entry.timezone !== "string") return null;
+  return entry.query.toLowerCase() === location.toLowerCase() ? entry : null;
+}
+
+function cachedNormals(cache: PlaceCache): MonthlyNormals | null {
+  const stored = cache.normals;
+  if (!stored || !Array.isArray(stored.byMonth)) return null;
+  const { startYear, endYear } = normalsPeriod();
+  if (stored.startYear !== startYear || stored.endYear !== endYear) return null;
+  // Only the live-archive baseline is ever stored — the Wolfram file costs no request to read.
+  return { byMonth: stored.byMonth, startYear, endYear, source: "Open-Meteo" };
+}
+
+function normalsToCache(normals: MonthlyNormals): PlaceCache["normals"] {
+  return {
+    byMonth: normals.byMonth.map((mean) => (mean == null ? null : Math.round(mean * 10) / 10)),
+    startYear: normals.startYear,
+    endYear: normals.endYear,
+  };
+}
 
 const STRINGS: Record<string, Record<Lang, string>> = {
   noLocation: { en: "No location configured.", ja: "地点が設定されていません。", zh: "尚未设置地点。" },
@@ -126,7 +177,7 @@ function WeatherIconGlyph({ icon }: { icon: WeatherIcon }) {
 }
 
 export default function Weather({ config }: { config: Record<string, unknown> }) {
-  const comp = config.comp as { location?: string; refreshMinutes?: number } | undefined;
+  const comp = config.comp as { location?: string; refreshMinutes?: number; cache?: unknown } | undefined;
   const save = config._save as ((comp: Record<string, unknown>) => void) | undefined;
   const configuredLocation = (comp?.location ?? "").trim();
   // A non-positive or nonsensical value turns auto refresh off rather than spinning a runaway timer.
@@ -153,10 +204,10 @@ export default function Weather({ config }: { config: Record<string, unknown> })
   // A shrinking result list must not leave the highlight pointing past its end.
   const activeIndex = suggestions && highlight < suggestions.length ? highlight : -1;
 
-  const [placeName, setPlaceName] = useState("");
+  // The place the weather on screen belongs to, once the location has been resolved.
+  const [place, setPlace] = useState<PlaceCache | null>(null);
   // Bumped to force a reload when the location name stayed the same but the place behind it changed.
   const [reloadKey, setReloadKey] = useState(0);
-  const geoRef = useRef<GeocodeResult | null>(null);
   const [weather, setWeather] = useState<CurrentWeather | null>(null);
   const [normals, setNormals] = useState<MonthlyNormals | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error" | "notFound">("idle");
@@ -165,6 +216,14 @@ export default function Weather({ config }: { config: Record<string, unknown> })
   // outside this card, and the blur handler, which runs before React re-renders after a commit and
   // would otherwise put the previous location back into the box.
   const locationRef = useRef(configuredLocation);
+
+  // A load writes the cache back long after it started (the monthly baseline especially), by which
+  // time the settings around it may have been edited — so writes merge onto the newest comp, never
+  // onto the one the load began with.
+  const compRef = useRef(comp);
+  useEffect(() => {
+    compRef.current = comp;
+  }, [comp]);
 
   // Follow the location when it changes from outside the card (config editor, layout import),
   // without clobbering what the user is typing here.
@@ -181,18 +240,21 @@ export default function Weather({ config }: { config: Record<string, unknown> })
     setQuery(trimmed);
     setOpen(false);
     setHighlight(-1);
-    if (picked) primeGeocodeCache(trimmed, picked);
     if (trimmed === location) {
       // Same name, different place — two "Springfield"s, say. The name in the config doesn't change,
-      // so nothing above triggers a reload; this does.
-      if (picked && geoRef.current && (picked.lat !== geoRef.current.lat || picked.lon !== geoRef.current.lon)) {
+      // so nothing above triggers a reload; storing the pick and bumping this does.
+      if (picked && place && (picked.lat !== place.lat || picked.lon !== place.lon)) {
+        save?.({ ...comp, cache: placeCache(trimmed, picked) });
         setReloadKey((n) => n + 1);
       }
       return;
     }
     locationRef.current = trimmed;
     setLocation(trimmed);
-    save?.({ ...comp, location: trimmed });
+    // A dropdown pick brings its own coordinates, so they go straight into the cache and the load
+    // below needs no geocoding. Free text has to be resolved, and the old place must not answer for
+    // a location it isn't.
+    save?.({ ...comp, location: trimmed, cache: picked ? placeCache(trimmed, picked) : undefined });
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -245,14 +307,18 @@ export default function Weather({ config }: { config: Record<string, unknown> })
     }
     let cancelled = false;
     setStatus("loading");
+    const saveCache = (cache: PlaceCache) => save?.({ ...compRef.current, cache });
 
     (async () => {
       try {
-        const geo = await geocodeLocation(location);
-        if (cancelled) return;
-        geoRef.current = geo;
-        setPlaceName(geo.name);
-        const current = await fetchCurrentWeather({ lat: geo.lat, lon: geo.lon }, geo.timezone);
+        let cache = readPlaceCache(comp?.cache, location);
+        if (!cache) {
+          cache = placeCache(location, await geocodeLocation(location));
+          if (cancelled) return;
+          saveCache(cache);
+        }
+        setPlace(cache);
+        const current = await fetchCurrentWeather(cache, cache.timezone);
         if (cancelled) return;
         setWeather(current);
         setStatus("ready");
@@ -260,18 +326,27 @@ export default function Weather({ config }: { config: Record<string, unknown> })
         // Wolfram's prebuilt baseline (refresh.sh → data/monthly-mean-temp.json) is preferred: it
         // costs no request at all. The live archive only fills in when this location isn't in
         // location.txt, or its current month has too few years on record — ten years of daily data
-        // is a slow, chunky request, so it is never awaited alongside the core weather fetch, and
-        // the card simply omits the comparison line if it fails.
+        // is a slow, chunky request, so it is never awaited alongside the core weather fetch, its
+        // result is kept in the card's config, and the card simply omits the comparison line if it
+        // fails.
         const monthIndex = Number(current.time.slice(5, 7)) - 1;
         const fromFile = monthlyNormalsFromFile(location);
+        const stored = cachedNormals(cache);
         if (fromFile?.byMonth[monthIndex] != null) {
           setNormals(fromFile);
+        } else if (stored) {
+          setNormals(stored);
         } else {
           // Drop any baseline left over from a previously configured location, so the new
           // temperature is never briefly paired with the old place's monthly average.
           setNormals(null);
-          fetchMonthlyNormals({ lat: geo.lat, lon: geo.lon }, geo.timezone)
-            .then((data) => { if (!cancelled) setNormals(data); })
+          const resolved = cache;
+          fetchMonthlyNormals(resolved, resolved.timezone)
+            .then((data) => {
+              if (cancelled) return;
+              setNormals(data);
+              saveCache({ ...resolved, normals: normalsToCache(data) });
+            })
             .catch(() => { if (!cancelled) setNormals(null); });
         }
       } catch (err) {
@@ -282,17 +357,21 @@ export default function Weather({ config }: { config: Record<string, unknown> })
     return () => {
       cancelled = true;
     };
+    // The cache is read as it stands when a load starts, not depended on: this effect writes it,
+    // and a reload for the same location is asked for through reloadKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location, reloadKey]);
 
   // Auto refresh of the current conditions, on its own effect so that editing the interval only
-  // rebuilds the timer instead of re-running the load above (geocode + monthly baseline).
+  // rebuilds the timer instead of re-running the load above (geocode + monthly baseline). It reuses
+  // the resolved place, so a tick costs one request; the query check keeps a timer left from the
+  // previous location from reporting its weather while the new one is still loading.
   useEffect(() => {
-    if (!location || refreshMinutes <= 0) return;
+    if (!place || place.query.toLowerCase() !== location.toLowerCase() || refreshMinutes <= 0) return;
     let cancelled = false;
 
     const id = setInterval(() => {
-      geocodeLocation(location)
-        .then((geo) => fetchCurrentWeather({ lat: geo.lat, lon: geo.lon }, geo.timezone))
+      fetchCurrentWeather(place, place.timezone)
         .then((current) => { if (!cancelled) setWeather(current); })
         .catch(() => undefined);
     }, refreshMinutes * 60 * 1000);
@@ -301,7 +380,7 @@ export default function Weather({ config }: { config: Record<string, unknown> })
       cancelled = true;
       clearInterval(id);
     };
-  }, [location, reloadKey, refreshMinutes]);
+  }, [place, location, refreshMinutes]);
 
   // The box stays on screen in every state — a wrong or unknown location has to be fixable without
   // opening the config editor.
@@ -362,8 +441,8 @@ export default function Weather({ config }: { config: Record<string, unknown> })
       </div>
       {/* The geocoder resolves loose input ("tokio") to a real place; show it when it differs from
           what was typed, so the card never silently reports some other city's weather. */}
-      {status === "ready" && placeName && placeName.toLowerCase() !== location.toLowerCase() && (
-        <span className={styles.resolvedPlace}>→ {placeName}</span>
+      {status === "ready" && place && place.name.toLowerCase() !== location.toLowerCase() && (
+        <span className={styles.resolvedPlace}>→ {place.name}</span>
       )}
     </div>
   );

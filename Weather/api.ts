@@ -68,31 +68,6 @@ export type MonthlyNormals = {
   source: "Wolfram|Alpha" | "Open-Meteo";
 };
 
-const GEOCODE_CACHE_PREFIX = "liveboard-weather-geocode:";
-const GEOCODE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-
-type Cached<T> = { data: T; fetchedAt: number };
-
-function readCache<T>(key: string, ttlMs: number): T | null {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Cached<T>;
-    if (Date.now() - parsed.fetchedAt > ttlMs) return null;
-    return parsed.data;
-  } catch {
-    return null;
-  }
-}
-
-function writeCache<T>(key: string, data: T) {
-  try {
-    localStorage.setItem(key, JSON.stringify({ data, fetchedAt: Date.now() }));
-  } catch {
-    // ignore storage errors (private mode, quota, etc.)
-  }
-}
-
 type GeocodeApiPlace = {
   id?: number;
   latitude: number;
@@ -127,28 +102,14 @@ async function searchGeocoder(query: string, count: number): Promise<GeocodeResu
 }
 
 export async function geocodeLocation(query: string): Promise<GeocodeResult> {
-  const cacheKey = GEOCODE_CACHE_PREFIX + query.trim().toLowerCase();
-  const cached = readCache<GeocodeResult>(cacheKey, GEOCODE_TTL_MS);
-  if (cached) return cached;
-
   const first = (await searchGeocoder(query, 1))[0];
   if (!first) throw new LocationNotFoundError(query);
-  writeCache(cacheKey, first);
   return first;
 }
 
-// Candidates for the location dropdown. Deliberately uncached: the query changes on every
-// keystroke, so caching each partial word would only fill up localStorage.
+// Candidates for the location dropdown.
 export async function searchLocations(query: string, count: number): Promise<GeocodeResult[]> {
   return searchGeocoder(query, count);
-}
-
-// Store a picked dropdown entry under the key geocodeLocation() reads, so a name that matches
-// several places ("Springfield") resolves to the exact one the user chose rather than to whichever
-// the geocoder ranks first. Only the name is persisted in the config, so without this the
-// coordinates behind a pick would be lost on the next load.
-export function primeGeocodeCache(query: string, result: GeocodeResult) {
-  writeCache(GEOCODE_CACHE_PREFIX + query.trim().toLowerCase(), result);
 }
 
 export async function fetchCurrentWeather(coords: Coords, timezone: string): Promise<CurrentWeather> {
@@ -225,8 +186,13 @@ export async function fetchCurrentWeather(coords: Coords, timezone: string): Pro
 }
 
 const NORMALS_YEARS = 10;
-const NORMALS_CACHE_PREFIX = "liveboard-weather-monthly-normals:";
-const NORMALS_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+// The window a baseline covers: the last NORMALS_YEARS *complete* years. Exported so a baseline
+// kept in a card's config can be checked against it and refetched once a new year rolls in.
+export function normalsPeriod(): { startYear: number; endYear: number } {
+  const endYear = new Date().getFullYear() - 1;
+  return { startYear: endYear - (NORMALS_YEARS - 1), endYear };
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
@@ -239,14 +205,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 // calendar month averaged over the last NORMALS_YEARS *complete* years. Only whole past years
 // count — ERA5 lags a few days behind today, and a partial current year would drag a month's
 // baseline towards whichever part of the year has already happened. One request covers all 12
-// months (~65 KB) and the result only moves when a new year rolls in, hence the month-long cache.
+// months (~65 KB) and the result only moves when a new year rolls in, so the card keeps what comes
+// back in its own config instead of asking again on every load.
 export async function fetchMonthlyNormals(coords: Coords, timezone: string): Promise<MonthlyNormals> {
-  const endYear = new Date().getFullYear() - 1;
-  const startYear = endYear - (NORMALS_YEARS - 1);
-  const cacheKey = `${NORMALS_CACHE_PREFIX}${coords.lat.toFixed(2)},${coords.lon.toFixed(2)}:${startYear}-${endYear}`;
-  const cached = readCache<MonthlyNormals>(cacheKey, NORMALS_TTL_MS);
-  if (cached) return cached;
-
+  const { startYear, endYear } = normalsPeriod();
   const url = new URL("https://archive-api.open-meteo.com/v1/archive");
   url.searchParams.set("latitude", String(coords.lat));
   url.searchParams.set("longitude", String(coords.lon));
@@ -269,14 +231,12 @@ export async function fetchMonthlyNormals(coords: Coords, timezone: string): Pro
     bucket.days += 1;
   });
 
-  const normals: MonthlyNormals = {
+  return {
     byMonth: buckets.map((b) => (b.days ? b.total / b.days : null)),
     startYear,
     endYear,
     source: "Open-Meteo",
   };
-  writeCache(cacheKey, normals);
-  return normals;
 }
 
 // Wolfram|Alpha monthly means, keyed by lowercased location then "YYYY-MM" (°C, null where
@@ -303,8 +263,7 @@ export function monthlyNormalsFromFile(location: string): MonthlyNormals | null 
   const history = monthlyHistory[location.trim().toLowerCase()];
   if (!history) return null;
 
-  const endYear = new Date().getFullYear() - 1;
-  const startYear = endYear - (NORMALS_YEARS - 1);
+  const { startYear, endYear } = normalsPeriod();
   const byMonth: Array<number | null> = [];
   for (let month = 1; month <= 12; month++) {
     const values: number[] = [];
