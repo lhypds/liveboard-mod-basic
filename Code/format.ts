@@ -546,10 +546,77 @@ function formatHtml(source: string, unit: number): string {
 
 /* --- JSON ---------------------------------------------------------------- */
 
+function isJsonSpace(char: string): boolean {
+  return char === " " || char === "\t" || char === "\n" || char === "\r";
+}
+
+/* Where the value starting at `start` ends. Containers end on the bracket that
+   balances the first one; a bare scalar ends at the whitespace or comma after
+   it. -1 means the value never closes, so the source isn't a value sequence. */
+function findValueEnd(source: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  let index = start;
+
+  while (index < source.length) {
+    const char = source[index];
+    if (inString) {
+      if (char === "\\") index += 2;
+      else {
+        if (char === '"') inString = false;
+        index += 1;
+      }
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      index += 1;
+      continue;
+    }
+    if (char === "{" || char === "[") depth += 1;
+    else if (char === "}" || char === "]") {
+      depth -= 1;
+      if (depth === 0) return index + 1;
+      if (depth < 0) return -1;
+    } else if (depth === 0 && (isJsonSpace(char) || char === ",")) return index;
+    index += 1;
+  }
+
+  return depth === 0 && !inString ? source.length : -1;
+}
+
+/* A log written one JSON value per line — JSONL, or values simply run together
+   — is not itself JSON, but it is a list of JSON. Read it back as one, so the
+   card can hand it to the formatter as the array it was always meant to be. */
+function parseJsonSequence(source: string): unknown[] | null {
+  const values: unknown[] = [];
+  let index = 0;
+
+  while (index < source.length) {
+    // Separators between values are optional: newlines and commas both count
+    while (index < source.length && (isJsonSpace(source[index]) || source[index] === ",")) index += 1;
+    if (index >= source.length) break;
+    const end = findValueEnd(source, index);
+    if (end === -1) return null;
+    try {
+      values.push(JSON.parse(source.slice(index, end)));
+    } catch {
+      return null;
+    }
+    index = end;
+  }
+
+  return values.length ? values : null;
+}
+
 function formatJson(source: string, unit: number): string {
   try {
     return JSON.stringify(JSON.parse(source), null, unit);
   } catch {
+    const values = parseJsonSequence(source);
+    // One value only means the source was a lone value with something stray
+    // around it, like a trailing comma — wrapping that would change what it says
+    if (values) return JSON.stringify(values.length === 1 ? values[0] : values, null, unit);
     /* Half-written JSON still deserves tidy indentation. */
     return formatBracketed(source, unit);
   }
