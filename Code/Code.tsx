@@ -817,6 +817,64 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
     window.requestAnimationFrame(() => input.setSelectionRange(selectionStart + delta, selectionEnd + delta));
   }
 
+  /* Pasted code arrives indented for wherever it was copied from, so it is laid
+     out again for where it lands. The whole document is formatted — a block needs
+     the nesting around it to know its own level — but only the lines the paste
+     itself brought in are taken from that pass, so nothing the reader wrote
+     elsewhere moves. */
+  function formatPastedBlock(input: HTMLTextAreaElement, pasted: string) {
+    if (editorRef.current !== input) return;
+    const text = input.value;
+    const end = input.selectionStart;
+    const start = end - pasted.length;
+    // Only lay out what can be seen to be the block the browser just inserted
+    if (start < 0 || text.slice(start, end) !== pasted) return;
+
+    const before = text.slice(0, start);
+    const after = text.slice(end);
+    const formatted = formatSource(text, language);
+    const textLines = text.split("\n");
+    const formattedLines = formatted.split("\n");
+
+    /* A reprint rather than a re-indent — JSON, once the whole document parses —
+       has no line-for-line mapping to splice, so it replaces the document. */
+    if (formattedLines.length !== textLines.length) {
+      if (formatted !== text) applyEdit(0, text.length, formatted);
+      return;
+    }
+
+    const firstLine = before.split("\n").length - 1;
+    const lastLine = firstLine + pasted.split("\n").length - 1;
+    /* The line the caret started on and the line the paste runs into are shared
+       with code that was already there, so they keep the bytes they were written
+       with and only the lines that are purely pasted get re-indented. */
+    const runsOn = after !== "" && !after.startsWith("\n");
+    const from = !before || before.endsWith("\n") ? firstLine : firstLine + 1;
+    const to = pasted.endsWith("\n") || runsOn ? lastLine - 1 : lastLine;
+    if (from > to) return;
+
+    const lines = [...textLines];
+    for (let index = from; index <= to; index += 1) lines[index] = formattedLines[index];
+    const next = lines.join("\n");
+    if (next === text) return;
+
+    // Neither end is touched by the splice, so what sits between them is the
+    // block the paste turned into.
+    applyEdit(start, end, next.slice(start, next.length - after.length));
+  }
+
+  /* The paste itself is left to the browser and the formatting follows as an edit
+     of its own, so the first Ctrl+Z gives back the code exactly as it was pasted
+     and the next one takes the paste away. The layout can only be worked out once
+     the text has landed, so it waits for the frame after the paste. */
+  function handleEditorPaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const pasted = event.clipboardData.getData("text/plain").replace(/\r\n?/g, "\n");
+    // A fragment with no line break has no indentation to fix
+    if (!pasted.includes("\n")) return;
+    const input = event.currentTarget;
+    window.requestAnimationFrame(() => formatPastedBlock(input, pasted));
+  }
+
   function handleEditorKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Escape" && findOpen) {
       event.preventDefault();
@@ -1048,6 +1106,7 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
                   value={sources[language]}
                   onChange={(event) => updateSource(event.target.value)}
                   onKeyDown={handleEditorKeyDown}
+                  onPaste={handleEditorPaste}
                   onScroll={syncEditorScroll}
                   wrap="off"
                   spellCheck={false}
