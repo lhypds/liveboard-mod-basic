@@ -1,6 +1,6 @@
 .container {
   box-sizing: border-box;
-  width: calc(100% + 10px);
+  width: 100%;
   height: calc(100% + 10px);
   display: flex;
   flex-direction: column;

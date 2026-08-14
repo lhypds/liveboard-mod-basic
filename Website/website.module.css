@@ -5,16 +5,15 @@
   height: 100%;
 }
 
-/* Card body adds extra padding-right/bottom for scrollbar clearance; grow
-   the border into it so it sits at an even margin on all four sides. Kept
-   separate from .container (and pointer-events: none) so the iframe itself
-   never extends into that space — otherwise it swallows the wheel/drag
+/* Card body keeps a bottom gutter clear of the grid resize handle; grow the border into it so it
+   sits at an even margin on all four sides. Kept separate from .container (and pointer-events:
+   none) so the iframe itself never extends into that space — otherwise it swallows the wheel/drag
    input meant for the card's own scrollbar. */
 .border {
   position: absolute;
   inset: 0;
   box-sizing: border-box;
-  width: calc(100% + 10px);
+  width: 100%;
   height: calc(100% + 10px);
   border: 1px solid #ccc;
   pointer-events: none;
@@ -46,7 +45,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: calc(100% + 10px);
+  width: 100%;
   height: calc(100% + 10px);
   border: 1px solid #ccc;
 }

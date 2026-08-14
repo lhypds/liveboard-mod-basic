@@ -4,7 +4,7 @@
      room is measured against the card's own width */
   container-type: inline-size;
   box-sizing: border-box;
-  width: calc(100% + 10px);
+  width: 100%;
   height: calc(100% + 10px);
   display: flex;
   flex-direction: column;
