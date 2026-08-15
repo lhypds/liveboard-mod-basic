@@ -33,6 +33,19 @@ Editor and runner for HTML, JavaScript, JSON and Python, with Prism highlighting
 JavaScript and Python (Pyodide) run in Web Workers, HTML renders in a sandboxed iframe, JSON is shown as data — no DOM and no network in either worker.  
 Mode per language: Console (JS, Python), Python Interpreter, HTML Preview, JSON View.  
 
+`Calendar`
+
+Compact month calendar with localized labels, date selection, month navigation and configurable Sunday/Monday week starts.
+
+`Clock`
+
+Monochrome analog and digital clock with an IANA time zone, 12/24-hour display and optional seconds.
+
+`Map`
+
+Data-free Mapbox Light base map with localized labels, navigation controls and optional Google address search.
+It reuses `VITE_MAPBOX_TOKEN` and `VITE_GOOGLE_MAPS_API_KEY` already configured for `eitai/HeatMap`.
+
 
 Setup
 -----

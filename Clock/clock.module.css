@@ -1,0 +1,111 @@
+.container {
+  height: calc(100% + 12px);
+  min-height: 220px;
+  margin-bottom: -12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.clock {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.face {
+  display: block;
+  width: min(100%, 200px);
+  max-height: calc(100% - 64px);
+  aspect-ratio: 1;
+  flex: 0 1 auto;
+  overflow: visible;
+  font-family: var(--font-title);
+}
+
+.rim {
+  fill: #fff;
+  stroke: #000;
+  stroke-width: 2;
+  filter: drop-shadow(2px 2px 0 #000);
+}
+
+.tick,
+.majorTick,
+.hourHand,
+.minuteHand,
+.secondHand {
+  stroke: #000;
+  stroke-linecap: square;
+}
+
+.tick {
+  stroke-width: 1;
+}
+
+.majorTick {
+  stroke-width: 2;
+}
+
+.numeral {
+  fill: #0f172a;
+  font-size: 12px;
+  font-weight: 600;
+  user-select: none;
+}
+
+.hourHand {
+  stroke-width: 5;
+}
+
+.minuteHand {
+  stroke-width: 3;
+}
+
+.secondHand {
+  stroke-width: 1;
+}
+
+.pin {
+  fill: #fff;
+  stroke: #000;
+  stroke-width: 2;
+}
+
+.readout {
+  width: min(100%, 240px);
+  min-width: 0;
+  text-align: center;
+}
+
+.digital {
+  font-family: var(--font-title);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.date,
+.zone {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.date {
+  margin-top: 2px;
+  font-size: 11px;
+}
+
+.zone {
+  margin-top: 2px;
+  font-family: var(--font-title);
+  font-size: 9px;
+  color: #6b7280;
+}

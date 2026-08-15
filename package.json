@@ -11,6 +11,7 @@
     "react-i18next": "^17.0.8"
   },
   "dependencies": {
+    "mapbox-gl": "^3.24.0",
     "prismjs": "^1.30.0",
     "pyodide": "^314.0.3"
   },

@@ -1,0 +1,166 @@
+.container {
+  height: calc(100% + 12px);
+  min-height: 210px;
+  margin-bottom: -12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.calendar {
+  width: 100%;
+  max-width: 430px;
+  overflow: hidden;
+  border: 1px solid #000;
+  background: #fff;
+  box-shadow: 2px 2px 0 #000;
+  color: #0f172a;
+}
+
+.toolbar {
+  height: 34px;
+  display: grid;
+  grid-template-columns: 34px 1fr 34px;
+  align-items: stretch;
+  border-bottom: 1px solid #000;
+}
+
+.month {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.arrow,
+.todayButton,
+.day {
+  border: 0;
+  background: #fff;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.arrow {
+  padding: 0 0 2px;
+  font-family: var(--font-title);
+  font-size: 23px;
+  line-height: 1;
+}
+
+.arrow:first-child {
+  border-right: 1px solid #000;
+}
+
+.arrow:last-child {
+  border-left: 1px solid #000;
+}
+
+.arrow:hover,
+.todayButton:hover {
+  background: #000;
+  color: #fff;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(25px, 1fr));
+  padding: 7px;
+  gap: 3px;
+}
+
+.weekday {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  font-family: var(--font-title);
+  font-size: 10px;
+  font-weight: 700;
+  color: #6b7280;
+  user-select: none;
+}
+
+.day {
+  position: relative;
+  min-height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  font-family: var(--font-title);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.day:hover {
+  border-color: #000;
+}
+
+.outside {
+  color: #a3a3a3;
+}
+
+.today {
+  border-color: #000;
+  font-weight: 700;
+}
+
+.today::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  transform: translateX(-50%);
+}
+
+.selected {
+  border-color: #000;
+  background: #000;
+  color: #fff;
+}
+
+.footer {
+  min-height: 34px;
+  display: flex;
+  align-items: stretch;
+  border-top: 1px solid #000;
+}
+
+.fullDate {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 5px 9px;
+  overflow: hidden;
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.todayButton {
+  flex: 0 0 auto;
+  padding: 0 11px;
+  border-left: 1px solid #000;
+  font-family: var(--font-title);
+  font-size: 10px;
+}
+
+@media (max-width: 420px) {
+  .grid {
+    gap: 1px;
+    padding: 5px;
+  }
+
+  .day {
+    min-height: 27px;
+  }
+}

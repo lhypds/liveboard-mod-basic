@@ -5,6 +5,9 @@ import * as Note from "./Note";
 import * as Weather from "./Weather";
 import * as Chat from "./Chat";
 import * as Code from "./Code";
+import * as Calendar from "./Calendar";
+import * as Clock from "./Clock";
+import * as Map from "./Map";
 
 export type ModuleEntry = {
   component: ComponentType<{ config: Record<string, unknown> }>;
@@ -36,6 +39,9 @@ const avaliableModules: Record<string, ModuleEntry> = {
   Weather: { component: Weather.default, config: Weather.config },
   Chat: { component: Chat.default, config: Chat.config },
   Code: { component: Code.default, config: Code.config },
+  Calendar: { component: Calendar.default, config: Calendar.config },
+  Clock: { component: Clock.default, config: Clock.config },
+  Map: { component: Map.default, config: Map.config },
 };
 
 const modules: Record<string, ModuleEntry> = Object.fromEntries(

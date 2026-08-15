@@ -14,5 +14,17 @@
   "Code": {
     "enabled": true,
     "allowMultipleInstances": true
+  },
+  "Calendar": {
+    "enabled": true,
+    "allowMultipleInstances": true
+  },
+  "Clock": {
+    "enabled": true,
+    "allowMultipleInstances": true
+  },
+  "Map": {
+    "enabled": true,
+    "allowMultipleInstances": true
   }
 }

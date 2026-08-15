@@ -1,6 +1,6 @@
 export const config = {
   i: "Website",
-  title: { en: "Website", ja: "ウェブサイト", zh: "网页组件" },
+  title: { en: "Website", ja: "ウェブサイト", zh: "网页" },
   refreshAgeMinutes: 0,
   info: [
     {
