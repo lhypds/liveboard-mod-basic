@@ -44,6 +44,7 @@ type TripComp = {
   startDate?: string;
   endDate?: string;
   currency?: string;
+  summaryNote?: string;
   rates?: unknown;
   days?: Record<string, unknown>;
 };
@@ -110,6 +111,7 @@ const TEXT: Record<string, Record<Lang, string>> = {
   fee: { en: "Fee", ja: "宿泊費", zh: "住宿费" },
   remove: { en: "Remove", ja: "削除", zh: "删除" },
   tripSummary: { en: "Trip summary", ja: "旅行サマリー", zh: "行程摘要" },
+  summaryNote: { en: "Trip summary note", ja: "旅行サマリーのノート", zh: "行程摘要备注" },
   totalCost: { en: "Total cost", ja: "合計費用", zh: "总费用" },
   costBreakdown: { en: "Cost breakdown", ja: "費用明細", zh: "费用明细" },
   showChart: { en: "Show pie chart", ja: "円グラフを表示", zh: "显示饼图" },
@@ -972,6 +974,16 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
                 )}
               </div>
             )}
+            <div className={styles.summaryNoteWrap}>
+              <TextArea
+                className={styles.noteArea}
+                minHeight={45}
+                rows={2}
+                value={textValue(comp.summaryNote)}
+                aria-label={TEXT.summaryNote[lang]}
+                onChange={(event) => commit({ summaryNote: event.target.value })}
+              />
+            </div>
           </div>
         )}
       </section>
