@@ -5,11 +5,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* "safe" keeps the calendar's top/left reachable once the card is resized smaller
+     than it — plain centering would push those edges out of the scrollable area.
+     The unprefixed pair above stays as the fallback for browsers without it. */
+  align-items: safe center;
+  justify-content: safe center;
 }
 
 .calendar {
-  width: 100%;
-  max-width: 430px;
+  /* The calendar keeps the size it was created at rather than tracking the card:
+     the default layout is w:18 on a 20px grid = 360px, less the grid item's 10px
+     gap padding, the card's 10px padding and its 1px border, on both sides.
+     Resizing the card reveals or clips space around it instead of stretching the
+     day cells. */
+  width: 318px;
+  flex: none;
   overflow: hidden;
   border: 1px solid #000;
   background: #fff;
@@ -155,6 +165,12 @@
 }
 
 @media (max-width: 420px) {
+  /* Phones are narrower than the created size, so there the calendar goes back to
+     filling what it is given rather than overflowing the screen */
+  .calendar {
+    width: 100%;
+  }
+
   .grid {
     gap: 1px;
     padding: 5px;

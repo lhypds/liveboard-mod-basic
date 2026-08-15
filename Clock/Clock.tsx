@@ -1,5 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  buildZoneOptions,
+  formatOffset,
+  localTimeZone,
+  validTimeZone,
+  zoneOffsetMinutes,
+  type ZoneOption,
+} from "./timeZones";
 import styles from "./clock.module.css";
 
 type Lang = "en" | "ja" | "zh";
@@ -10,15 +18,29 @@ const LOCALES: Record<Lang, string> = {
   zh: "zh-CN",
 };
 
-function validTimeZone(value: unknown): string | undefined {
-  if (typeof value !== "string" || !value.trim()) return undefined;
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: value }).format();
-    return value;
-  } catch {
-    return undefined;
-  }
-}
+const STRINGS: Record<Lang, { change: string; search: string; system: string; empty: string; close: string }> = {
+  en: {
+    change: "Change time zone",
+    search: "Search time zone...",
+    system: "System time zone",
+    empty: "No matching time zone",
+    close: "Close",
+  },
+  ja: {
+    change: "タイムゾーンを変更",
+    search: "タイムゾーンを検索...",
+    system: "システムのタイムゾーン",
+    empty: "該当するタイムゾーンがありません",
+    close: "閉じる",
+  },
+  zh: {
+    change: "更改时区",
+    search: "搜索时区...",
+    system: "系统时区",
+    empty: "未找到匹配的时区",
+    close: "关闭",
+  },
+};
 
 function timeParts(date: Date, timeZone: string | undefined): { hour: number; minute: number; second: number } {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -36,12 +58,15 @@ export default function Clock({ config }: { config: Record<string, unknown> }) {
   const { i18n } = useTranslation();
   const lang = (i18n.language in LOCALES ? i18n.language : "en") as Lang;
   const locale = LOCALES[lang];
+  const strings = STRINGS[lang];
   const comp = config.comp as { timeZone?: string; hour12?: boolean; showSeconds?: boolean } | undefined;
+  const save = config._save as ((comp: Record<string, unknown>) => void) | undefined;
   const timeZone = validTimeZone(comp?.timeZone);
-  const timeZoneLabel = timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const timeZoneLabel = timeZone ?? localTimeZone();
   const hour12 = comp?.hour12 === true;
   const showSeconds = comp?.showSeconds !== false;
   const [now, setNow] = useState(() => new Date());
+  const [picking, setPicking] = useState(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1_000);
@@ -68,6 +93,13 @@ export default function Clock({ config }: { config: Record<string, unknown> }) {
     day: "numeric",
     timeZone,
   }).format(now);
+
+  function pickZone(zone: string) {
+    // The empty id is the "follow the device" row; dropping the key rather than storing a name is
+    // what keeps the card correct when the same board is opened somewhere else.
+    save?.({ ...comp, timeZone: zone || undefined });
+    setPicking(false);
+  }
 
   return (
     <div className={styles.container}>
@@ -114,7 +146,147 @@ export default function Clock({ config }: { config: Record<string, unknown> }) {
         <div className={styles.readout}>
           <div className={styles.digital}>{digitalTime}</div>
           <div className={styles.date}>{dateLabel}</div>
-          <div className={styles.zone}>{timeZoneLabel}</div>
+          <button type="button" className={styles.zone} title={strings.change} onClick={() => setPicking(true)}>
+            {timeZoneLabel}
+          </button>
+        </div>
+      </div>
+
+      {picking && (
+        <ZonePicker
+          selected={timeZone ?? ""}
+          strings={strings}
+          onPick={pickZone}
+          onClose={() => setPicking(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ZonePicker({
+  selected,
+  strings,
+  onPick,
+  onClose,
+}: {
+  selected: string;
+  strings: (typeof STRINGS)[Lang];
+  onPick: (zone: string) => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const opening = useRef(true);
+
+  // Built once per opening: ~400 zones, each needing its own formatter, is too much to redo on
+  // every keystroke, and the offsets can't drift in the seconds the picker is open.
+  const options = useMemo(() => {
+    const at = new Date();
+    const local = localTimeZone();
+    const system: ZoneOption = {
+      zone: "",
+      city: strings.system,
+      region: local,
+      offsetMinutes: zoneOffsetMinutes(local, at),
+      offsetLabel: formatOffset(zoneOffsetMinutes(local, at)),
+      search: `${strings.system} ${local.replace(/_/g, " ")}`.toLowerCase(),
+    };
+    return [system, ...buildZoneOptions(at)];
+  }, [strings.system]);
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return options;
+    return options.filter((option) => option.search.includes(needle));
+  }, [options, query]);
+
+  // The picker opens on the zone the card is already set to rather than at the top of a 400-row list.
+  const [highlight, setHighlight] = useState(() => Math.max(0, options.findIndex((o) => o.zone === selected)));
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  // Typing narrows the list under the highlight, so it starts over at the best match.
+  useEffect(() => {
+    setHighlight(query.trim() ? 0 : Math.max(0, filtered.findIndex((option) => option.zone === selected)));
+    // `filtered` is derived from `query`; keying on the query alone is what makes this run per edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  useEffect(() => {
+    const row = listRef.current?.children[highlight] as HTMLElement | undefined;
+    // The jump to the current zone lands mid-list, so the zones around it are visible too; every
+    // later move is a step, and should scroll as little as it can.
+    row?.scrollIntoView({ block: opening.current ? "center" : "nearest" });
+    opening.current = false;
+  }, [highlight, filtered]);
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      onClose();
+      return;
+    }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (!filtered.length) return;
+      e.preventDefault();
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      setHighlight((prev) => (prev + step + filtered.length) % filtered.length);
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const option = filtered[highlight];
+      if (option) onPick(option.zone);
+    }
+  }
+
+  return (
+    <div
+      className={styles.pickerOverlay}
+      onKeyDown={handleKeyDown}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className={styles.picker}>
+        <div className={styles.pickerHeader}>
+          <input
+            ref={inputRef}
+            className={styles.pickerSearch}
+            value={query}
+            placeholder={strings.search}
+            aria-label={strings.change}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <button type="button" className={styles.pickerClose} aria-label={strings.close} onClick={onClose}>
+            ✕
+          </button>
+        </div>
+        <div ref={listRef} className={styles.pickerList} role="listbox" aria-label={strings.change}>
+          {filtered.map((option, index) => (
+            <button
+              key={option.zone || "system"}
+              type="button"
+              role="option"
+              aria-selected={option.zone === selected}
+              className={`${styles.pickerOption} ${index === highlight ? styles.pickerOptionActive : ""} ${
+                option.zone === selected ? styles.pickerOptionSelected : ""
+              }`}
+              // Movement, not entry: a list that appears under a resting cursor fires mouseenter on
+              // its own, which would drag the highlight off the selected row the moment it opens.
+              onMouseMove={() => setHighlight(index)}
+              onClick={() => onPick(option.zone)}
+            >
+              <span className={styles.pickerCity}>{option.city}</span>
+              <span className={styles.pickerRegion}>{option.region}</span>
+              <span className={styles.pickerOffset}>{option.offsetLabel}</span>
+            </button>
+          ))}
+          {!filtered.length && <div className={styles.pickerEmpty}>{strings.empty}</div>}
         </div>
       </div>
     </div>

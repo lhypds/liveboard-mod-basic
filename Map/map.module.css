@@ -98,3 +98,8 @@
 :global(.mapboxgl-ctrl-group button + button) {
   border-top: 1px solid #000;
 }
+
+.wrapper :global(.mapboxgl-ctrl-group button) {
+  width: 22px;
+  height: 22px;
+}

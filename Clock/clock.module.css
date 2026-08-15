@@ -1,4 +1,5 @@
 .container {
+  position: relative;
   height: calc(100% + 12px);
   min-height: 220px;
   margin-bottom: -12px;
@@ -103,9 +104,139 @@
   font-size: 11px;
 }
 
+/* A button, but it has to keep reading as the caption it was — the dashed rule is the only thing
+   saying it can be clicked, and it only firms up on hover. */
 .zone {
+  max-width: 100%;
   margin-top: 2px;
+  padding: 0;
+  border: none;
+  border-bottom: 1px dashed #d4d4d8;
+  background: none;
   font-family: var(--font-title);
-  font-size: 9px;
+  font-size: 10px;
   color: #6b7280;
+  cursor: pointer;
+}
+
+.zone:hover,
+.zone:focus-visible {
+  border-bottom-color: #6b7280;
+  color: #0f172a;
+  outline: none;
+}
+
+/* Covers the card body rather than opening as a modal: the list is the card's own setting, and a
+   card this small has no room to show both. */
+.pickerOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  border: 1px solid black;
+  background: #fff;
+}
+
+.pickerHeader {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-bottom: 1px solid black;
+}
+
+.pickerSearch {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: #0f172a;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.pickerClose {
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pickerClose:hover {
+  color: #000;
+}
+
+.pickerList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.pickerOption {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickerCity {
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.pickerRegion {
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pickerOffset {
+  color: #6b7280;
+  font-family: var(--font-title);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pickerOptionSelected .pickerCity {
+  font-weight: 600;
+}
+
+.pickerOptionActive {
+  background: black;
+}
+
+.pickerOptionActive .pickerCity,
+.pickerOptionActive .pickerRegion,
+.pickerOptionActive .pickerOffset {
+  color: white;
+}
+
+.pickerEmpty {
+  padding: 6px;
+  color: #6b7280;
+  font-size: 12px;
 }
