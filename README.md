@@ -46,6 +46,12 @@ Monochrome analog and digital clock with an IANA time zone, 12/24-hour display a
 Data-free Mapbox Light base map with localized labels, navigation controls and optional Google address search.
 It reuses `VITE_MAPBOX_TOKEN` and `VITE_GOOGLE_MAPS_API_KEY` already configured for `eitai/HeatMap`.
 
+`Image`
+
+A picture, dropped on the card — an empty card says "Drop a image here" until it has one.
+The drop is compressed to WebP in the browser (`comp.quality`, scaled down to `comp.maxSize` on its longest edge), then uploaded to the board's image API, which stores it under `data/images` named after its own digest.
+The card keeps only the URL, never the bytes: a board is saved as JSON, so an inline picture would ride along in every save, export and sync.
+
 
 Setup
 -----

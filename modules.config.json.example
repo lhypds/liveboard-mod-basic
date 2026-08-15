@@ -26,5 +26,9 @@
   "Map": {
     "enabled": true,
     "allowMultipleInstances": true
+  },
+  "Image": {
+    "enabled": true,
+    "allowMultipleInstances": true
   }
 }
