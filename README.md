@@ -46,6 +46,12 @@ Monochrome analog and digital clock with an IANA time zone, 12/24-hour display a
 Data-free Mapbox Light base map with localized labels, navigation controls and optional Google address search.
 It reuses `VITE_MAPBOX_TOKEN` and `VITE_GOOGLE_MAPS_API_KEY` already configured for `eitai/HeatMap`.
 
+`Trip`
+
+Date-range trip planner with a custom calendar, one card per day and a trip-wide cost summary and itemized bill.
+Flights include route and departure/arrival details, with linked return-day cards for round trips; rental cars include routes and pickup/return times; hotel stays stay synchronized
+across their covered days; events include time and location. Every item supports costs, and every day has a compact free-form note.
+
 `Image`
 
 A picture, dropped on the card — an empty card says "Drop a image here" until it has one.

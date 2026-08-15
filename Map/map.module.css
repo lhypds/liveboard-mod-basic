@@ -24,7 +24,6 @@
   max-width: calc(100% - 72px);
   background: #fff;
   border: 1px solid #000;
-  box-shadow: 1px 1px 0 #000;
 }
 
 .searchInput {
@@ -92,7 +91,7 @@
 :global(.mapboxgl-ctrl-group) {
   border: 1px solid #000;
   border-radius: 0;
-  box-shadow: 1px 1px 0 #000;
+  box-shadow: none;
 }
 
 :global(.mapboxgl-ctrl-group button + button) {
@@ -100,6 +99,16 @@
 }
 
 .wrapper :global(.mapboxgl-ctrl-group button) {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
+}
+
+.wrapper :global(.mapboxgl-ctrl-zoom-in .mapboxgl-ctrl-icon) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 3v10M3 8h10' fill='none' stroke='%230f172a' stroke-width='1'/%3E%3C/svg%3E");
+  background-size: 14px 14px;
+}
+
+.wrapper :global(.mapboxgl-ctrl-zoom-out .mapboxgl-ctrl-icon) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8h10' fill='none' stroke='%230f172a' stroke-width='1'/%3E%3C/svg%3E");
+  background-size: 14px 14px;
 }

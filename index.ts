@@ -9,6 +9,7 @@ import * as Calendar from "./Calendar";
 import * as Clock from "./Clock";
 import * as Map from "./Map";
 import * as Image from "./Image";
+import * as Trip from "./Trip";
 
 export type ModuleEntry = {
   component: ComponentType<{ config: Record<string, unknown> }>;
@@ -44,6 +45,7 @@ const avaliableModules: Record<string, ModuleEntry> = {
   Clock: { component: Clock.default, config: Clock.config },
   Map: { component: Map.default, config: Map.config },
   Image: { component: Image.default, config: Image.config },
+  Trip: { component: Trip.default, config: Trip.config },
 };
 
 const modules: Record<string, ModuleEntry> = Object.fromEntries(

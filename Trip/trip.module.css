@@ -1,0 +1,811 @@
+.container {
+  box-sizing: border-box;
+  width: 100%;
+  height: calc(100% + 12px);
+  min-height: 250px;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: -12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.container::-webkit-scrollbar {
+  display: none;
+}
+
+.dateSection {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border: 1px solid #000;
+  background: #fff;
+}
+
+.rangeBar {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 6px;
+}
+
+.dateField,
+.stayField {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: var(--font-title);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.dateField {
+  flex: 0 1 140px;
+  font-size: 10px;
+}
+
+.rangeArrow {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  font-family: var(--font-title);
+  font-size: 14px;
+}
+
+.rangeDays {
+  height: 24px;
+  display: flex;
+  flex: 0 0 auto;
+  align-self: flex-end;
+  align-items: center;
+  margin-left: 4px;
+  font-family: var(--font-title);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.tripSummary {
+  border-top: 1px solid #d4d4d4;
+  background: #fff;
+  font-family: var(--font-title);
+  font-size: 12px;
+}
+
+.summaryTitle {
+  padding: 6px 8px;
+  border-bottom: 1px solid #000;
+  background: #f0f0f0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.summaryBody {
+  min-height: 32px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 5px;
+  padding: 4px 8px;
+}
+
+.currencyField {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #525252;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.summaryCurrencyDropdown {
+  width: 44px;
+  height: 24px;
+  text-transform: none;
+}
+
+.summaryCurrencyDropdown > div {
+  width: 100%;
+}
+
+.summaryCurrencyDropdown > div > button {
+  width: 100%;
+  height: 24px;
+  padding: 0 4px;
+  border-color: #000;
+  font-family: var(--font-title);
+  font-size: 11px;
+}
+
+.summaryCurrencyDropdown > div > div > button {
+  width: 100%;
+  padding-inline: 4px;
+  font-family: var(--font-title);
+  font-size: 11px;
+}
+
+.summaryCurrencyDropdown > div > div {
+  right: 0;
+  left: auto;
+}
+
+.summaryTotal {
+  margin-left: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.summaryTotal small {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.fxStatus {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  border-top: 1px solid #d4d4d4;
+  color: #525252;
+  font-size: 10px;
+}
+
+.fxStatus button {
+  height: 19px;
+  padding: 1px 5px;
+  border: 1px solid #000;
+  border-radius: 0;
+  background: #fff;
+  color: #000;
+  font-family: var(--font-title);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.fxStatus button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.fxError {
+  color: #991b1b;
+}
+
+.empty {
+  min-height: 170px;
+  display: flex;
+  flex: 1 0 170px;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  color: #6b7280;
+  font-family: var(--font-title);
+  font-size: 12px;
+  text-align: center;
+}
+
+.error {
+  color: #0f172a;
+}
+
+.days {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  align-items: start;
+  gap: 12px;
+  padding: 12px 1px 1px;
+}
+
+.dayCard {
+  min-width: 0;
+  border: 1px solid #000;
+  background: #fff;
+}
+
+.today {
+  outline: 1px solid #000;
+  outline-offset: 2px;
+}
+
+.dayHeader {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 6px;
+  border-bottom: 1px solid #000;
+  background: #f0f0f0;
+  color: #0f172a;
+  font-family: var(--font-title);
+  font-size: 12px;
+}
+
+.dayHeader time {
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dayNumber {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.dayActions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 3px;
+  margin-left: auto;
+}
+
+.addButton {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: 1px solid #000;
+  border-radius: 0;
+  background: #fff;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.addButton svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  stroke-width: 1.25;
+}
+
+.addButton .flightIcon {
+  fill: currentColor;
+  stroke: none;
+}
+
+.addButton:hover,
+.addButton:active {
+  background: #f5f5f5;
+  color: #000;
+}
+
+.dayBody {
+  padding: 8px;
+  background: #fff;
+}
+
+.entries {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+
+.entry {
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid #000;
+  background: #fff;
+}
+
+.entryTop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.entryType {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.hotelNight {
+  font-weight: 400;
+  text-transform: none;
+}
+
+.removeButton {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  margin-left: auto;
+  padding: 0 0 1px;
+  border: 1px solid #000;
+  border-radius: 0;
+  background: #fff;
+  color: #0f172a;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.removeButton:hover {
+  background: #f0f0f0;
+}
+
+.fieldGrid,
+.stayGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.roundTripToggle {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #525252;
+  font-family: var(--font-title);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.roundTripCheckbox {
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #000;
+  background: #fff;
+  color: #000;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.inputField,
+.stayField {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 5px;
+  color: #525252;
+  font-family: var(--font-title);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.inputField input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 27px;
+  padding: 3px 5px;
+  border: 1px solid #b5b5b5;
+  border-radius: 0;
+  outline: none;
+  background: #fff;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 400;
+  text-transform: none;
+}
+
+.inputField input:focus {
+  border-color: #000;
+}
+
+.inputField .timeInput {
+  width: 0;
+  flex: 1 1 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.dateTimeControls {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dateTimeControls input {
+  height: 24px;
+  padding: 2px 3px;
+  font-size: 11px;
+}
+
+.timeControl {
+  min-width: 0;
+  display: flex;
+  gap: 3px;
+}
+
+.timeMeridiem {
+  width: 43px;
+  height: 24px;
+  flex: 0 0 43px;
+  text-transform: none;
+}
+
+.timeMeridiem > div {
+  width: 100%;
+}
+
+.timeMeridiem > div > button {
+  width: 100%;
+  height: 24px;
+  gap: 2px;
+  padding: 0 3px;
+  font-family: var(--font-title);
+  font-size: 10px;
+}
+
+.timeMeridiem > div > div {
+  right: 0;
+  left: auto;
+}
+
+.timeMeridiem > div > div > button {
+  width: 100%;
+  height: 24px;
+  padding-inline: 4px;
+  font-family: var(--font-title);
+  font-size: 10px;
+}
+
+.costControl {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  gap: 3px;
+}
+
+.costControl input {
+  flex: 1 1 auto;
+}
+
+.costCurrency {
+  width: 44px;
+  height: 27px;
+  flex: 0 0 44px;
+}
+
+.costCurrency > div {
+  width: 100%;
+}
+
+.costCurrency > div > button {
+  width: 100%;
+  height: 27px;
+  padding: 0 4px;
+  border-color: #000;
+  border-left: 1px solid #000;
+  font-family: var(--font-title);
+  font-size: 11px;
+}
+
+.costCurrency > div > div {
+  right: 0;
+  left: auto;
+}
+
+.costCurrency > div > div > button {
+  width: 100%;
+  padding-inline: 4px;
+  font-family: var(--font-title);
+  font-size: 11px;
+}
+
+.inputField input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.inputField input[type="number"]::-webkit-inner-spin-button,
+.inputField input[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.noteWrap {
+  margin-top: 2px;
+}
+
+.noteArea {
+  box-sizing: border-box;
+  height: 45px;
+  min-height: 45px;
+  padding: 7px;
+  border: 1px solid #000;
+  border-radius: 0;
+  background: #fff;
+  color: #0f172a;
+  font-family: var(--font-title);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.costSection {
+  margin: 14px 1px 1px;
+  border: 1px solid #000;
+  background: #fff;
+  font-family: var(--font-title);
+  font-size: 12px;
+}
+
+.costSection > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid #000;
+  background: #fff;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.costViewButton {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  flex: 0 0 22px;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: 1px solid #000;
+  border-radius: 0;
+  background: #fff;
+  color: #000;
+  cursor: pointer;
+}
+
+.costViewButton svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+}
+
+.costViewButton svg path {
+  fill: currentColor;
+  stroke: none;
+}
+
+.costViewButton:hover,
+.costViewButtonActive {
+  background: #000;
+  color: #fff;
+}
+
+.costViewButton:disabled {
+  background: #fff;
+  color: #a3a3a3;
+  cursor: default;
+}
+
+.costChartControl {
+  position: relative;
+  display: flex;
+}
+
+.costChartPopover {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  right: 0;
+  z-index: 60;
+  box-sizing: border-box;
+  width: 280px;
+  max-width: calc(100vw - 32px);
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid #000;
+  background: #fff;
+  font-weight: 400;
+  text-transform: none;
+  scrollbar-width: none;
+}
+
+.costChartPopover::-webkit-scrollbar {
+  display: none;
+}
+
+.costChartPopover .noCosts {
+  border-bottom: 0;
+}
+
+.costChart {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  align-items: center;
+  padding: 9px;
+  background: #fff;
+}
+
+.pieChart {
+  width: min(100%, 120px);
+  height: auto;
+}
+
+.pieLegend {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid #000;
+}
+
+.pieLegendRow {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid #000;
+}
+
+.pieSwatch {
+  width: 9px;
+  height: 9px;
+  border: 1px solid #000;
+}
+
+.pieLegendLabel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.pieLegendLabel strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pieLegendLabel small {
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.pieLegendAmount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pieLegendAmount small {
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.billHeader,
+.billRow {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.9fr) minmax(0, 0.45fr) minmax(130px, 1.4fr);
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid #000;
+}
+
+.billHeader {
+  background: #fff;
+  color: #000;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.billRow span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.billRow > span:first-child,
+.billRow > span:last-child {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.billHeader span:last-child,
+.billRow span:last-child {
+  text-align: right;
+}
+
+.noCosts {
+  padding: 16px 8px;
+  border-bottom: 1px solid #000;
+  color: #000;
+  text-align: center;
+}
+
+.billRow:nth-last-child(2),
+.noCosts:nth-last-child(2) {
+  border-bottom: 0;
+}
+
+.billTotal {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 8px;
+  border-top: 1px dashed #000;
+  background: #fff;
+  font-size: 11px;
+}
+
+@media (max-width: 480px) {
+  .rangeBar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .dateField {
+    flex: 1 1 calc(50% - 20px);
+  }
+
+  .rangeArrow {
+    margin-top: 12px;
+  }
+
+  .tripSummary {
+    background: #fff;
+  }
+
+  .summaryBody {
+    flex-wrap: wrap;
+    padding-block: 6px;
+  }
+
+  .summaryTotal {
+    width: auto;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+
+}
