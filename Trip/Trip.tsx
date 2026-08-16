@@ -41,6 +41,7 @@ type DayPlan = {
 };
 
 type TripComp = {
+  destination?: string;
   startDate?: string;
   endDate?: string;
   currency?: string;
@@ -110,7 +111,12 @@ const TEXT: Record<string, Record<Lang, string>> = {
   cost: { en: "Cost", ja: "費用", zh: "费用" },
   fee: { en: "Fee", ja: "宿泊費", zh: "住宿费" },
   remove: { en: "Remove", ja: "削除", zh: "删除" },
-  tripSummary: { en: "Trip summary", ja: "旅行サマリー", zh: "行程摘要" },
+  destination: { en: "Destination", ja: "目的地", zh: "目的地" },
+  destinationPlaceholder: {
+    en: "Where are you going?",
+    ja: "どこへ行きますか？",
+    zh: "要去哪里？",
+  },
   summaryNote: { en: "Trip summary note", ja: "旅行サマリーのノート", zh: "行程摘要备注" },
   totalCost: { en: "Total cost", ja: "合計費用", zh: "总费用" },
   costBreakdown: { en: "Cost breakdown", ja: "費用明細", zh: "费用明细" },
@@ -125,7 +131,7 @@ const TEXT: Record<string, Record<Lang, string>> = {
   fxUpdated: { en: "Exchange rates", ja: "為替レート", zh: "汇率更新" },
   retry: { en: "Retry", ja: "再試行", zh: "重试" },
   add: { en: "Add", ja: "追加", zh: "添加" },
-  searchLocation: { en: "Search on Google", ja: "Googleで検索", zh: "用谷歌搜索" },
+  searchLocation: { en: "Search on Google Maps", ja: "Googleマップで検索", zh: "用谷歌地图搜索" },
 };
 
 const TITLE_PLACEHOLDER: Record<EntryType, Record<Lang, string>> = {
@@ -257,13 +263,6 @@ function dateRange(start: string, end: string): { dates: string[]; error?: "inva
   return { dates: Array.from({ length: count }, (_, index) => isoDate(startTime + index * DAY_MS)) };
 }
 
-function todayKey(): string {
-  const today = new Date();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  return `${today.getFullYear()}-${month}-${day}`;
-}
-
 function entryId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
@@ -378,7 +377,8 @@ function MarkerIcon() {
 function openLocationSearch(location: string) {
   const query = location.trim();
   if (!query) return;
-  window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`, "_blank", "noopener,noreferrer");
+  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 function formatTimeInput(raw: string): string | null {
@@ -608,7 +608,6 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
   const currency = validCurrency(comp.currency);
   const storedDays = isRecord(comp.days) ? comp.days : EMPTY_DAYS;
   const range = useMemo(() => dateRange(startDate, endDate), [startDate, endDate]);
-  const today = todayKey();
   const neededCurrencies = useMemo(() => {
     const codes = new Set([currency]);
     for (const value of Object.values(storedDays)) {
@@ -939,7 +938,16 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
   return (
     <div className={styles.container}>
       <section className={styles.dateSection}>
-        <div className={styles.summaryTitle}>{TEXT.tripSummary[lang]}</div>
+        <div className={styles.destinationBar}>
+          <span>{TEXT.destination[lang]}</span>
+          <input
+            type="text"
+            value={textValue(comp.destination)}
+            placeholder={TEXT.destinationPlaceholder[lang]}
+            aria-label={TEXT.destination[lang]}
+            onChange={(event) => commit({ destination: event.target.value })}
+          />
+        </div>
         <div className={styles.rangeBar}>
           <div className={styles.dateField}>
             <span>{TEXT.startDate[lang]}</span>
@@ -1035,7 +1043,7 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
               const weekday = dateLabel(date, locale, { weekday: "short" });
               const fullDate = `${calendarDate}\u2009${weekday}`;
               return (
-                <section key={date} className={`${styles.dayCard} ${date === today ? styles.today : ""}`}>
+                <section key={date} className={styles.dayCard}>
                   <header className={styles.dayHeader}>
                     <time dateTime={date}>{fullDate}</time>
                     <span className={styles.dayNumber}>{dayNumberLabel(dayIndex + 1, lang)}</span>

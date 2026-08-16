@@ -40,6 +40,7 @@ export const config = {
   minW: 18,
   minH: 16,
   comp: {
+    destination: "",
     startDate: "",
     endDate: "",
     currency: "JPY",
