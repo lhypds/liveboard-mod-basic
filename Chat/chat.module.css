@@ -1,9 +1,7 @@
 .container {
   position: relative;
-  /* Reclaim the card body's bottom gutter (kept clear of the grid resize handle) so the box is
-     inset by the same distance on every side — same trick as the Note card. */
   width: 100%;
-  height: calc(100% + 10px);
+  height: 100%;
   display: flex;
   min-height: 0;
 }

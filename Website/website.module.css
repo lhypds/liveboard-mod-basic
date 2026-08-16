@@ -5,16 +5,14 @@
   height: 100%;
 }
 
-/* Card body keeps a bottom gutter clear of the grid resize handle; grow the border into it so it
-   sits at an even margin on all four sides. Kept separate from .container (and pointer-events:
-   none) so the iframe itself never extends into that space — otherwise it swallows the wheel/drag
-   input meant for the card's own scrollbar. */
+/* The frame is drawn over the iframe rather than around it (and with pointer-events: none) so the
+   iframe never swallows the wheel/drag input meant for the card itself. */
 .border {
   position: absolute;
   inset: 0;
   box-sizing: border-box;
   width: 100%;
-  height: calc(100% + 10px);
+  height: 100%;
   border: 1px solid #ccc;
   pointer-events: none;
 }
@@ -46,7 +44,7 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: calc(100% + 10px);
+  height: 100%;
   border: 1px solid #ccc;
 }
 

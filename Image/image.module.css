@@ -1,10 +1,7 @@
 .container {
   position: relative;
   box-sizing: border-box;
-  /* Same reach as the card's other bodies: grow into the bottom gutter the card keeps clear of the
-     grid resize handle, so the picture sits at an even margin on all four sides. */
-  height: calc(100% + 12px);
-  margin-bottom: -12px;
+  height: 100%;
   display: flex;
   overflow: hidden;
 }
