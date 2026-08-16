@@ -15,6 +15,14 @@ export const config = {
           },
         },
         {
+          key: { en: "Drop an address", ja: "住所をドロップ", zh: "拖入地址" },
+          value: {
+            en: "Drag text onto the card to set its zone from that place. Street addresses need the Google Maps key the Map card is set up with; city names work without it.",
+            ja: "テキストをカードにドラッグするとその場所のタイムゾーンに設定。番地まで含む住所はMapカードのGoogle Mapsキーが必要で、都市名はキーなしでも動作",
+            zh: "将文字拖到卡片上即可按该地点设置时区。街道地址需要 Map 卡片配置的 Google Maps 密钥，城市名无需密钥",
+          },
+        },
+        {
           key: { en: "Display", ja: "表示", zh: "显示" },
           value: {
             en: "comp.hour12 changes 12/24-hour time; comp.showSeconds shows the second hand",

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { resolveTimeZone } from "./geocode";
 import {
   buildZoneOptions,
   formatOffset,
@@ -18,13 +19,29 @@ const LOCALES: Record<Lang, string> = {
   zh: "zh-CN",
 };
 
-const STRINGS: Record<Lang, { change: string; search: string; system: string; empty: string; close: string }> = {
+type Strings = {
+  change: string;
+  search: string;
+  system: string;
+  empty: string;
+  close: string;
+  dropHint: string;
+  resolving: string;
+  notFound: string;
+  error: string;
+};
+
+const STRINGS: Record<Lang, Strings> = {
   en: {
     change: "Change time zone",
     search: "Search time zone...",
     system: "System time zone",
     empty: "No matching time zone",
     close: "Close",
+    dropHint: "Drop an address to set the time zone",
+    resolving: "Finding time zone...",
+    notFound: "No time zone found for that address",
+    error: "Time zone lookup failed",
   },
   ja: {
     change: "タイムゾーンを変更",
@@ -32,6 +49,10 @@ const STRINGS: Record<Lang, { change: string; search: string; system: string; em
     system: "システムのタイムゾーン",
     empty: "該当するタイムゾーンがありません",
     close: "閉じる",
+    dropHint: "住所をドロップしてタイムゾーンを設定",
+    resolving: "タイムゾーンを検索中...",
+    notFound: "その住所のタイムゾーンが見つかりません",
+    error: "タイムゾーンの取得に失敗しました",
   },
   zh: {
     change: "更改时区",
@@ -39,8 +60,31 @@ const STRINGS: Record<Lang, { change: string; search: string; system: string; em
     system: "系统时区",
     empty: "未找到匹配的时区",
     close: "关闭",
+    dropHint: "拖入地址即可设置时区",
+    resolving: "正在查找时区...",
+    notFound: "未找到该地址对应的时区",
+    error: "时区查询失败",
   },
 };
+
+const TEXT_DRAG_TYPES = ["text/plain", "text/uri-list"];
+
+function carriesText(transfer: DataTransfer): boolean {
+  return TEXT_DRAG_TYPES.some((type) => transfer.types.includes(type));
+}
+
+// A dragged selection arrives with whatever line breaks and padding it had on the page it came
+// from; the geocoder wants one line, and a runaway paragraph is not an address anyway
+function droppedAddress(transfer: DataTransfer): string {
+  const raw = transfer.getData("text/plain") || transfer.getData("text/uri-list");
+  return raw.replace(/\s+/g, " ").trim().slice(0, 200);
+}
+
+// What the card says about a drop it cannot answer with the zone caption alone: that a lookup is
+// running, or that it came back with nothing. A lookup that worked says so by changing the clock.
+type DropStatus = { kind: "pending" | "error"; text: string };
+
+const STATUS_VISIBLE_MS = 5_000;
 
 function timeParts(date: Date, timeZone: string | undefined): { hour: number; minute: number; second: number } {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -67,11 +111,29 @@ export default function Clock({ config }: { config: Record<string, unknown> }) {
   const showSeconds = comp?.showSeconds !== false;
   const [now, setNow] = useState(() => new Date());
   const [picking, setPicking] = useState(false);
+  const [dropping, setDropping] = useState(false);
+  const [status, setStatus] = useState<DropStatus | null>(null);
+  // A lookup takes a couple of seconds, and the picker is still usable throughout — so what it
+  // writes back merges onto the newest comp rather than the one the drop started on.
+  const compRef = useRef(comp);
+  const saveRef = useRef(save);
+  useEffect(() => {
+    compRef.current = comp;
+    saveRef.current = save;
+  }, [comp, save]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  // A drop that found nothing has to say so, but it is not a state the card stays in — the line
+  // clears itself rather than sitting under the clock for the rest of the day.
+  useEffect(() => {
+    if (status?.kind !== "error") return;
+    const timer = window.setTimeout(() => setStatus(null), STATUS_VISIBLE_MS);
+    return () => window.clearTimeout(timer);
+  }, [status]);
 
   const parts = timeParts(now, timeZone);
   const hourAngle = (parts.hour % 12) * 30 + parts.minute * 0.5;
@@ -98,11 +160,61 @@ export default function Clock({ config }: { config: Record<string, unknown> }) {
     // The empty id is the "follow the device" row; dropping the key rather than storing a name is
     // what keeps the card correct when the same board is opened somewhere else.
     save?.({ ...comp, timeZone: zone || undefined });
+    setStatus(null);
     setPicking(false);
   }
 
+  async function applyAddress(address: string) {
+    setStatus({ kind: "pending", text: address });
+    try {
+      const found = await resolveTimeZone(address, lang);
+      if (!found) {
+        setStatus({ kind: "error", text: strings.notFound });
+        return;
+      }
+      saveRef.current?.({ ...compRef.current, timeZone: found.zone });
+      setStatus(null);
+    } catch (error) {
+      console.error("Time zone lookup failed:", error);
+      setStatus({ kind: "error", text: strings.error });
+    }
+  }
+
+  // Two moments when the card is already answering the same question: the picker sits over the
+  // whole card, so a drop landing on it would move the zone behind a list still being read, and a
+  // second drop mid-lookup would race the first one to the save.
+  const canDrop = !picking && status?.kind !== "pending";
+
+  function handleDragOver(event: DragEvent) {
+    // Only claiming the drop — preventDefault here is what lets a drop event fire at all, and
+    // skipping it leaves file drags to whatever the browser would normally do with them
+    if (!canDrop || !carriesText(event.dataTransfer)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setDropping(true);
+  }
+
+  function handleDragLeave(event: DragEvent) {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setDropping(false);
+  }
+
+  function handleDrop(event: DragEvent) {
+    if (!canDrop || !carriesText(event.dataTransfer)) return;
+    event.preventDefault();
+    setDropping(false);
+    const address = droppedAddress(event.dataTransfer);
+    if (!address) return;
+    void applyAddress(address);
+  }
+
   return (
-    <div className={styles.container}>
+    <div
+      className={styles.container}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <div className={styles.clock}>
         <svg className={styles.face} viewBox="0 0 200 200" role="img" aria-label={digitalTime}>
           <circle className={styles.rim} cx="100" cy="100" r="96" />
@@ -151,6 +263,18 @@ export default function Clock({ config }: { config: Record<string, unknown> }) {
           </button>
         </div>
       </div>
+
+      {dropping && <div className={styles.dropHint}>{strings.dropHint}</div>}
+
+      {status && (
+        <div
+          className={`${styles.status} ${status.kind === "error" ? styles.statusError : ""}`}
+          role="status"
+          title={status.text}
+        >
+          {status.kind === "pending" ? `${strings.resolving} ${status.text}` : status.text}
+        </div>
+      )}
 
       {picking && (
         <ZonePicker

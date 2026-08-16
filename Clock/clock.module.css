@@ -125,6 +125,51 @@
   outline: none;
 }
 
+/* The same drop affordance the Map card has: the whole card is the target, so the hint covers it
+   rather than pointing at one corner of it. */
+.dropHint {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 2px dashed #000;
+  background: rgba(255, 255, 255, 0.72);
+  color: #000;
+  font-family: var(--font-title);
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* Pinned to the bottom edge instead of joining the readout: a line that appears and leaves again
+   mid-card would shift the clock face every time an address lands. */
+.status {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  left: 6px;
+  z-index: 10;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 3px 6px;
+  border: 1px solid #000;
+  background: #fff;
+  color: #0f172a;
+  font-size: 10px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.statusError {
+  color: #b91c1c;
+}
+
 /* Covers the card body rather than opening as a modal: the list is the card's own setting, and a
    card this small has no room to show both. */
 .pickerOverlay {
