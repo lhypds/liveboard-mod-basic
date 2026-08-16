@@ -355,7 +355,7 @@ export default function Weather({ config }: { config: Record<string, unknown> })
         setWeather(current);
         setStatus("ready");
 
-        // Wolfram's prebuilt baseline (refresh.sh → data/monthly-mean-temp.json) is preferred: it
+        // Wolfram's prebuilt baseline (fetch.sh → data/monthly-mean-temp.json) is preferred: it
         // costs no request at all. The live archive only fills in when this location isn't in
         // location.txt, or its current month has too few years on record — ten years of daily data
         // is a slow, chunky request, so it is never awaited alongside the core weather fetch, its
@@ -416,7 +416,7 @@ export default function Weather({ config }: { config: Record<string, unknown> })
 
   // What the Refresh button re-runs: the current conditions for the place already resolved — the
   // same single request the timer above makes. Nothing runs on the server; the Wolfram baseline in
-  // data/ is refresh.sh's business, on a cron or by hand. Before a place has resolved (or right
+  // data/ is fetch.sh's business, on a cron or by hand. Before a place has resolved (or right
   // after the location changed) there is nothing to re-fetch, so the whole load is asked for again.
   async function reload() {
     if (!place || place.query.toLowerCase() !== location.toLowerCase()) {

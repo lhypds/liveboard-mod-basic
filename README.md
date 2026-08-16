@@ -20,7 +20,7 @@ Carries a `comp.prompt`, which is what puts the board's Generate button in the c
 
 `Weather`  
 Current conditions plus hourly, yesterday and next-days forecast for any place, from [Open-Meteo](https://open-meteo.com).  
-Compares today against the monthly mean temperature: Wolfram|Alpha 10 yr baselines, built by `refresh.sh` into `data/` for the locations in `location.txt`, with Open-Meteo Archive (ERA5) computed live for everywhere else.  
+Compares today against the monthly mean temperature: Wolfram|Alpha 10 yr baselines, built by `fetch.sh` into `data/` for the locations in `location.txt`, with Open-Meteo Archive (ERA5) computed live for everywhere else.  
 The location box searches the geocoder as you type; the picked place's coordinates are cached in `comp`, so a same-named place doesn't drift between loads.  
 
 `Chat`  

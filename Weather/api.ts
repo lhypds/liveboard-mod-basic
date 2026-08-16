@@ -1,7 +1,7 @@
 // Data sources:
 // - Open-Meteo: current weather + geocoding — https://open-meteo.com
 // - Wolfram|Alpha: monthly mean temperatures, the baseline the card compares today against.
-//   Needs an app id, so refresh.sh builds ./data/monthly-mean-temp.json for every location in
+//   Needs an app id, so fetch.sh builds ./data/monthly-mean-temp.json for every location in
 //   location.txt and the frontend reads it statically (monthlyNormalsFromFile below).
 // - Open-Meteo Archive (ERA5): the same monthly baseline computed live, used as a fallback for
 //   locations that are not in location.txt and therefore have no Wolfram data (fetchMonthlyNormals)
@@ -240,7 +240,7 @@ export async function fetchMonthlyNormals(coords: Coords, timezone: string): Pro
 }
 
 // Wolfram|Alpha monthly means, keyed by lowercased location then "YYYY-MM" (°C, null where
-// Wolfram has no record). Gitignored — only exists once refresh.sh has run on this machine or
+// Wolfram has no record). Gitignored — only exists once fetch.sh has run on this machine or
 // server, so the build never depends on it; without it callers just get an empty lookup and the
 // card falls back to fetchMonthlyNormals above.
 type MonthlyHistory = Record<string, Record<string, number | null>>;
