@@ -14,14 +14,24 @@
   overflow: hidden;
 }
 
-.searchBox {
+.topBar {
   position: absolute;
   top: 12px;
   left: 12px;
   z-index: 5;
   display: flex;
+  /* stretch, so the basemap picker is exactly as tall as the search box beside it */
   align-items: stretch;
+  gap: 8px;
+  height: 24px;
   max-width: calc(100% - 72px);
+}
+
+.searchBox {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
   background: #fff;
   border: 1px solid #000;
 }
@@ -30,7 +40,7 @@
   width: 280px;
   min-width: 0;
   flex: 1 1 auto;
-  padding: 4px 6px;
+  padding: 0 6px;
   border: 0;
   outline: 0;
   background: transparent;
@@ -39,7 +49,7 @@
 }
 
 .searchButton {
-  padding: 4px 10px;
+  padding: 0 10px;
   border: 0;
   border-left: 1px solid #000;
   background: #000;
@@ -70,6 +80,80 @@
   color: #000;
   font-size: 11px;
   white-space: nowrap;
+}
+
+/* Dropdown ships a 22px trigger at 12px type; these bring it down to the search box's
+   own height and hairline weight (the > div > button chain is the shared component's
+   wrapper and trigger, as in Trip's currency picker) */
+.basemapPicker {
+  flex: 0 0 auto;
+}
+
+.basemapPicker > div,
+.basemapPicker > div > button {
+  height: 100%;
+}
+
+.basemapPicker > div > button {
+  box-sizing: border-box;
+  padding: 0 6px;
+  border-color: #000;
+  font-size: 11px;
+}
+
+.basemapPicker > div > div > button {
+  box-sizing: border-box;
+  height: 22px;
+  font-size: 11px;
+}
+
+/* The feedback link is not something a board reader ever clicks; the © Mapbox and
+   © OpenStreetMap credits beside it stay */
+.wrapper :global(.mapboxgl-ctrl-attrib a.mapbox-improve-map) {
+  display: none;
+}
+
+.poi {
+  min-width: 80px;
+  max-width: 200px;
+}
+
+.poiName {
+  color: #0f172a;
+  font-family: var(--font-title);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.poiCategory {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.3;
+  text-transform: capitalize;
+}
+
+.wrapper :global(.mapboxgl-popup-content) {
+  padding: 5px 8px;
+  border: 1px solid #000;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.wrapper :global(.mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip) {
+  border-top-color: #000;
+}
+
+.wrapper :global(.mapboxgl-popup-anchor-top .mapboxgl-popup-tip) {
+  border-bottom-color: #000;
+}
+
+.wrapper :global(.mapboxgl-popup-anchor-left .mapboxgl-popup-tip) {
+  border-right-color: #000;
+}
+
+.wrapper :global(.mapboxgl-popup-anchor-right .mapboxgl-popup-tip) {
+  border-left-color: #000;
 }
 
 .missingToken {

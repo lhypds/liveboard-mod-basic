@@ -8,7 +8,19 @@ export const config = {
       items: [
         {
           key: { en: "Base map", ja: "ベースマップ", zh: "底图" },
-          value: { en: "Mapbox Light", ja: "Mapbox Light", zh: "Mapbox Light" },
+          value: {
+            en: "Mapbox Standard — shops, transit and 3D buildings",
+            ja: "Mapbox Standard — 店舗・交通機関・3D 建物",
+            zh: "Mapbox Standard — 店铺、交通与 3D 建筑",
+          },
+        },
+        {
+          key: { en: "Detail level", ja: "詳細度", zh: "详细程度" },
+          value: {
+            en: "Switch between Detailed, Satellite and Minimal; click a POI for its name",
+            ja: "詳細／衛星／シンプルを切替。POI をクリックすると名称を表示",
+            zh: "可切换详细／卫星／简约；点击 POI 查看名称",
+          },
         },
         {
           key: { en: "Address search", ja: "住所検索", zh: "地址搜索" },
@@ -34,7 +46,7 @@ export const config = {
   comp: {
     longitude: 139.7517,
     latitude: 35.6895,
-    zoom: 10,
-    style: "mapbox://styles/mapbox/light-v11",
+    zoom: 14,
+    basemap: "standard",
   },
 };
