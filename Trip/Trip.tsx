@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import DatePicker from "@ui/DatePicker";
 import Dropdown from "@ui/Dropdown";
@@ -133,6 +133,7 @@ const TEXT: Record<string, Record<Lang, string>> = {
   retry: { en: "Retry", ja: "再試行", zh: "重试" },
   add: { en: "Add", ja: "追加", zh: "添加" },
   searchLocation: { en: "Search on Google Maps", ja: "Googleマップで検索", zh: "用谷歌地图搜索" },
+  dragLocation: { en: "Drag onto a map card", ja: "地図カードにドラッグ", zh: "拖到地图卡片上" },
 };
 
 const TITLE_PLACEHOLDER: Record<EntryType, Record<Lang, string>> = {
@@ -388,6 +389,26 @@ function openLocationSearch(location: string) {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
+// The marker carries its address as plain text, so the Map card's search box takes it — and so
+// does anything else that accepts dropped text
+function startLocationDrag(event: DragEvent<HTMLElement>, location: string) {
+  const address = location.trim();
+  if (!address) {
+    event.preventDefault();
+    return;
+  }
+  event.dataTransfer.setData("text/plain", address);
+  event.dataTransfer.effectAllowed = "copy";
+  // What follows the cursor is the address itself, not the marker button it came from
+  const ghost = document.createElement("div");
+  ghost.className = styles.dragGhost;
+  ghost.textContent = address;
+  document.body.appendChild(ghost);
+  event.dataTransfer.setDragImage(ghost, 12, 12);
+  // The browser snapshots the node as the drag starts; it has no job after this frame
+  window.setTimeout(() => ghost.remove(), 0);
+}
+
 function formatTimeInput(raw: string): string | null {
   const digits = raw.replace(/\D/g, "").slice(0, 4);
   if (digits.length >= 2 && (Number(digits.slice(0, 2)) < 1 || Number(digits.slice(0, 2)) > 12)) return null;
@@ -506,8 +527,10 @@ function InputField({
             type="button"
             className={styles.mapButton}
             disabled={!value.trim()}
+            draggable={Boolean(value.trim())}
+            onDragStart={(event) => startLocationDrag(event, value)}
             aria-label={`${label} ${TEXT.searchLocation[lang]}`}
-            title={TEXT.searchLocation[lang]}
+            title={`${TEXT.searchLocation[lang]} / ${TEXT.dragLocation[lang]}`}
             onClick={() => openLocationSearch(value)}
           >
             <MarkerIcon />

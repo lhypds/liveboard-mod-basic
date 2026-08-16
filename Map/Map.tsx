@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
-import Dropdown from "@ui/Dropdown";
 import styles from "./map.module.css";
 
 const TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
@@ -13,6 +12,24 @@ const LANG_MAP: Record<string, string> = {
   ja: "ja",
   zh: "zh-Hans",
 };
+
+// Where LanguageSwitcher records the reader's pick — the same key i18n reads on boot
+function pickedUiLanguage(): string | null {
+  try {
+    return localStorage.getItem("lang");
+  } catch {
+    // Storage walled off (Safari private browsing); nothing was picked as far as we can tell
+    return null;
+  }
+}
+
+// A pick in the switcher wins. Until then the map follows the system: "auto" hands the choice to
+// Mapbox, which reads navigator.language — so a machine set to Korean gets Korean labels even
+// though the board's own UI only ships en/ja/zh.
+function mapLanguage(uiLanguage: string): string {
+  if (!pickedUiLanguage()) return "auto";
+  return LANG_MAP[uiLanguage] ?? "auto";
+}
 
 type BasemapKey = "standard" | "satellite" | "light";
 
@@ -37,40 +54,40 @@ const DETAIL_CONFIG: Record<string, boolean> = {
 type Strings = {
   placeholder: string;
   button: string;
+  clear: string;
   notFound: string;
   error: string;
   noToken: string;
-  basemapLabel: string;
-  basemaps: Record<BasemapKey, string>;
+  dropHint: string;
 };
 
 const STRINGS: Record<string, Strings> = {
   en: {
     placeholder: "Search address...",
     button: "Search",
+    clear: "Clear",
     notFound: "Address not found",
     error: "Search failed. Please try again.",
     noToken: "Add VITE_MAPBOX_TOKEN to display the map.",
-    basemapLabel: "Map detail",
-    basemaps: { standard: "Detailed", satellite: "Satellite", light: "Minimal" },
+    dropHint: "Drop text to search this address",
   },
   ja: {
     placeholder: "住所を検索...",
     button: "検索",
+    clear: "クリア",
     notFound: "住所が見つかりません",
     error: "検索に失敗しました。もう一度お試しください。",
     noToken: "地図を表示するには VITE_MAPBOX_TOKEN を設定してください。",
-    basemapLabel: "地図の詳細度",
-    basemaps: { standard: "詳細", satellite: "衛星", light: "シンプル" },
+    dropHint: "テキストをドロップして住所を検索",
   },
   zh: {
     placeholder: "搜索地址...",
     button: "搜索",
+    clear: "清除",
     notFound: "未找到该地址",
     error: "搜索失败，请重试。",
     noToken: "请设置 VITE_MAPBOX_TOKEN 以显示地图。",
-    basemapLabel: "地图详细程度",
-    basemaps: { standard: "详细", satellite: "卫星", light: "简约" },
+    dropHint: "拖入文字即可搜索该地址",
   },
 };
 
@@ -124,6 +141,19 @@ function finite(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+const TEXT_DRAG_TYPES = ["text/plain", "text/uri-list"];
+
+function carriesText(transfer: DataTransfer): boolean {
+  return TEXT_DRAG_TYPES.some((type) => transfer.types.includes(type));
+}
+
+// A dragged selection arrives with whatever line breaks and padding it had on the page it came
+// from; the geocoder wants one line, and a runaway paragraph is not an address anyway
+function droppedAddress(transfer: DataTransfer): string {
+  const raw = transfer.getData("text/plain") || transfer.getData("text/uri-list");
+  return raw.replace(/\s+/g, " ").trim().slice(0, 200);
+}
+
 type Comp = {
   longitude?: number;
   latitude?: number;
@@ -134,15 +164,16 @@ type Comp = {
   style?: string;
 };
 
-// `basemap` is what the picker writes. `style` is the pre-picker field: a hand-set style URL
-// still wins, but the old light-v11 default is exactly the sparse map this card replaced, so
-// it falls through to Standard rather than pinning every existing card to roads-only.
-function resolveStyle(comp: Comp | undefined): { key: BasemapKey | null; url: string } {
+// `basemap` is a BASEMAPS key, set by hand in the card's config — there is no picker on the map.
+// `style` is the older field: a hand-set style URL still wins, but the old light-v11 default is
+// exactly the sparse map this card replaced, so it falls through to Standard rather than pinning
+// every existing card to roads-only.
+function resolveStyleUrl(comp: Comp | undefined): string {
   const key = comp?.basemap;
-  if (typeof key === "string" && key in BASEMAPS) return { key: key as BasemapKey, url: BASEMAPS[key as BasemapKey] };
+  if (typeof key === "string" && key in BASEMAPS) return BASEMAPS[key as BasemapKey];
   const legacy = comp?.style;
-  if (typeof legacy === "string" && legacy && legacy !== BASEMAPS.light) return { key: null, url: legacy };
-  return { key: "standard", url: BASEMAPS.standard };
+  if (typeof legacy === "string" && legacy && legacy !== BASEMAPS.light) return legacy;
+  return BASEMAPS.standard;
 }
 
 function isStandard(url: string): boolean {
@@ -180,14 +211,16 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
     pitch: finite(comp?.pitch, 0),
     bearing: finite(comp?.bearing, 0),
   });
-  const [basemap, setBasemap] = useState(() => resolveStyle(comp));
+  // Read on every render, so editing `basemap` in the card's config restyles the live map
+  const styleUrl = resolveStyleUrl(comp);
   const containerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const searchMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const popupRef = useRef<mapboxgl.Popup | null>(null);
-  const styleUrlRef = useRef(basemap.url);
+  const styleUrlRef = useRef(styleUrl);
   const poiBoundRef = useRef(false);
-  const languageRef = useRef(LANG_MAP[i18n.language] ?? "en");
+  const languageRef = useRef(mapLanguage(i18n.language));
   // moveend outlives the render that registered it, so what it writes back merges onto the
   // newest comp rather than the one the map was built from
   const compRef = useRef(comp);
@@ -199,6 +232,8 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [dropping, setDropping] = useState(false);
+  const canDropSearch = Boolean(TOKEN && GOOGLE_API_KEY);
 
   useEffect(() => {
     if (!containerRef.current || !TOKEN) return;
@@ -211,6 +246,9 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
       zoom: initial.zoom,
       pitch: initial.pitch,
       bearing: initial.bearing,
+      // Set here as well as on style.load, so the first tiles already come back localized
+      // instead of arriving in English and being reloaded a moment later
+      language: languageRef.current,
       antialias: true,
       preserveDrawingBuffer: true,
     });
@@ -318,31 +356,30 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || styleUrlRef.current === basemap.url) return;
-    styleUrlRef.current = basemap.url;
+    if (!map || styleUrlRef.current === styleUrl) return;
+    styleUrlRef.current = styleUrl;
     popupRef.current?.remove();
     popupRef.current = null;
-    map.setStyle(basemap.url);
-  }, [basemap.url]);
+    map.setStyle(styleUrl);
+  }, [styleUrl]);
 
   useEffect(() => {
-    const map = mapRef.current;
-    languageRef.current = LANG_MAP[i18n.language] ?? "en";
-    if (!map) return;
-    const applyLanguage = () => map.setLanguage(languageRef.current);
-    if (map.isStyleLoaded()) applyLanguage();
-    else map.once("load", applyLanguage);
+    const applyLanguage = () => {
+      languageRef.current = mapLanguage(i18n.language);
+      const map = mapRef.current;
+      if (!map) return;
+      // "load" fires once in a map's life, so a style swapped in later would never see it
+      if (map.isStyleLoaded()) map.setLanguage(languageRef.current);
+      else map.once("style.load", () => map.setLanguage(languageRef.current));
+    };
+    applyLanguage();
+    // Changing the system language does not reload the page, and the board may sit open for days
+    window.addEventListener("languagechange", applyLanguage);
+    return () => window.removeEventListener("languagechange", applyLanguage);
   }, [i18n.language]);
 
-  function pickBasemap(key: BasemapKey) {
-    if (basemap.key === key) return;
-    setBasemap({ key, url: BASEMAPS[key] });
-    saveRef.current?.({ ...(compRef.current ?? {}), basemap: key });
-  }
-
-  async function handleSearch(event: FormEvent) {
-    event.preventDefault();
-    const address = searchQuery.trim();
+  async function runSearch(query: string) {
+    const address = query.trim();
     const map = mapRef.current;
     if (!address || !GOOGLE_API_KEY || !map) return;
 
@@ -369,38 +406,80 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
     }
   }
 
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    void runSearch(searchQuery);
+  }
+
+  // The pin is the other half of the search — leaving it behind on an empty box reads as a
+  // result that is still current
+  function handleClear() {
+    setSearchQuery("");
+    setSearchError(null);
+    searchMarkerRef.current?.remove();
+    searchMarkerRef.current = null;
+    searchInputRef.current?.focus();
+  }
+
+  function handleDragOver(event: DragEvent) {
+    // Only claiming the drop — preventDefault here is what lets a drop event fire at all, and
+    // skipping it leaves file drags to whatever the browser would normally do with them
+    if (!canDropSearch || !carriesText(event.dataTransfer)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setDropping(true);
+  }
+
+  function handleDragLeave(event: DragEvent) {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setDropping(false);
+  }
+
+  function handleDrop(event: DragEvent) {
+    if (!canDropSearch || !carriesText(event.dataTransfer)) return;
+    event.preventDefault();
+    setDropping(false);
+    const address = droppedAddress(event.dataTransfer);
+    if (!address || searching) return;
+    // The box shows what is being looked up, so a near miss can be edited and re-run
+    setSearchQuery(address);
+    setSearchError(null);
+    void runSearch(address);
+  }
+
   return (
-    <div className={styles.wrapper}>
+    <div
+      className={styles.wrapper}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <div ref={containerRef} className={styles.container} />
       {!TOKEN && <div className={styles.missingToken}>{strings.noToken}</div>}
+      {dropping && <div className={styles.dropHint}>{strings.dropHint}</div>}
       {TOKEN && (
         <div className={styles.topBar}>
           {GOOGLE_API_KEY && (
-            <form className={styles.searchBox} onSubmit={handleSearch}>
+            <form className={styles.searchBox} onSubmit={handleSubmit}>
               <input
+                ref={searchInputRef}
                 type="text"
                 className={styles.searchInput}
                 placeholder={strings.placeholder}
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
               />
+              {searchQuery && (
+                <button type="button" className={styles.clearButton} onClick={handleClear} aria-label={strings.clear}>
+                  ✕
+                </button>
+              )}
               <button type="submit" className={styles.searchButton} disabled={searching}>
                 {strings.button}
               </button>
               {searchError && <div className={styles.searchError}>{searchError}</div>}
             </form>
           )}
-          <div className={styles.basemapPicker}>
-            <Dropdown
-              value={basemap.key ?? "standard"}
-              options={(Object.keys(BASEMAPS) as BasemapKey[]).map((key) => ({
-                value: key,
-                label: strings.basemaps[key],
-              }))}
-              onChange={pickBasemap}
-              ariaLabel={strings.basemapLabel}
-            />
-          </div>
         </div>
       )}
     </div>

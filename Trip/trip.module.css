@@ -563,6 +563,24 @@
   color: #000;
 }
 
+/* Parked off-screen just long enough for the browser to snapshot it as the drag image */
+.dragGhost {
+  position: fixed;
+  top: -1000px;
+  left: -1000px;
+  max-width: 320px;
+  padding: 4px 8px;
+  border: 2px solid #000;
+  background: #fff;
+  color: #000;
+  font-family: var(--font-title);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .mapButton:disabled {
   border-color: #b5b5b5;
   color: #b5b5b5;

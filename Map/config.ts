@@ -17,9 +17,9 @@ export const config = {
         {
           key: { en: "Detail level", ja: "詳細度", zh: "详细程度" },
           value: {
-            en: "Switch between Detailed, Satellite and Minimal; click a POI for its name",
-            ja: "詳細／衛星／シンプルを切替。POI をクリックすると名称を表示",
-            zh: "可切换详细／卫星／简约；点击 POI 查看名称",
+            en: "Set basemap in this card's config: standard, satellite or light; click a POI for its name",
+            ja: "カード設定の basemap で指定：standard／satellite／light。POI をクリックすると名称を表示",
+            zh: "在卡片配置的 basemap 中设置：standard／satellite／light；点击 POI 查看名称",
           },
         },
         {

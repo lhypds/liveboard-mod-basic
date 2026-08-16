@@ -19,11 +19,27 @@
   left: 12px;
   z-index: 5;
   display: flex;
-  /* stretch, so the basemap picker is exactly as tall as the search box beside it */
   align-items: stretch;
-  gap: 8px;
-  height: 24px;
-  max-width: calc(100% - 72px);
+  height: 26px;
+  max-width: calc(100% - 86px);
+}
+
+/* pointer-events off, or the overlay swallows the dragleave and drop it is announcing */
+.dropHint {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 2px dashed #000;
+  background: rgba(255, 255, 255, 0.72);
+  color: #000;
+  font-family: var(--font-title);
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
 }
 
 .searchBox {
@@ -36,15 +52,32 @@
 }
 
 .searchInput {
-  width: 280px;
+  width: 302px;
   min-width: 0;
   flex: 1 1 auto;
-  padding: 0 6px;
+  padding: 0 8px;
   border: 0;
   outline: 0;
   background: transparent;
   color: #0f172a;
-  font-size: 11px;
+  font-size: 12px;
+}
+
+/* Inside the white field rather than beside the black Search button: it empties the box, it is
+   not a second way to run the search */
+.clearButton {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: #888;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.clearButton:hover {
+  color: #000;
 }
 
 .searchButton {
@@ -53,7 +86,7 @@
   border-left: 1px solid #000;
   background: #000;
   color: #fff;
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -72,38 +105,13 @@
   position: absolute;
   top: 100%;
   left: 0;
-  margin-top: 4px;
-  padding: 3px 6px;
+  margin-top: 6px;
+  padding: 4px 8px;
   border: 1px solid #000;
   background: #fff;
   color: #000;
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
-}
-
-/* Dropdown ships a 22px trigger at 12px type; these bring it down to the search box's
-   own height and hairline weight (the > div > button chain is the shared component's
-   wrapper and trigger, as in Trip's currency picker) */
-.basemapPicker {
-  flex: 0 0 auto;
-}
-
-.basemapPicker > div,
-.basemapPicker > div > button {
-  height: 100%;
-}
-
-.basemapPicker > div > button {
-  box-sizing: border-box;
-  padding: 0 6px;
-  border-color: #000;
-  font-size: 11px;
-}
-
-.basemapPicker > div > div > button {
-  box-sizing: border-box;
-  height: 22px;
-  font-size: 11px;
 }
 
 /* The feedback link is not something a board reader ever clicks; the © Mapbox and
@@ -182,16 +190,16 @@
 }
 
 .wrapper :global(.mapboxgl-ctrl-group button) {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
 }
 
 .wrapper :global(.mapboxgl-ctrl-zoom-in .mapboxgl-ctrl-icon) {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 3v10M3 8h10' fill='none' stroke='%230f172a' stroke-width='1'/%3E%3C/svg%3E");
-  background-size: 14px 14px;
+  background-size: 16px 16px;
 }
 
 .wrapper :global(.mapboxgl-ctrl-zoom-out .mapboxgl-ctrl-icon) {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8h10' fill='none' stroke='%230f172a' stroke-width='1'/%3E%3C/svg%3E");
-  background-size: 14px 14px;
+  background-size: 16px 16px;
 }
