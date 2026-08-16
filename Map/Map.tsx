@@ -162,7 +162,20 @@ type Comp = {
   bearing?: number;
   basemap?: string;
   style?: string;
+  address?: string;
+  addressLng?: number;
+  addressLat?: number;
 };
+
+// The coordinates an earlier search resolved to, saved beside the address so a reload can put the
+// pin back without spending a second geocoding call on a question already answered
+function savedPin(comp: Comp | undefined): [number, number] | null {
+  const lng = comp?.addressLng;
+  const lat = comp?.addressLat;
+  if (typeof lng !== "number" || !Number.isFinite(lng)) return null;
+  if (typeof lat !== "number" || !Number.isFinite(lat)) return null;
+  return [lng, lat];
+}
 
 // `basemap` is a BASEMAPS key, set by hand in the card's config — there is no picker on the map.
 // `style` is the older field: a hand-set style URL still wins, but the old light-v11 default is
@@ -211,6 +224,10 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
     pitch: finite(comp?.pitch, 0),
     bearing: finite(comp?.bearing, 0),
   });
+  // What the box was showing when the board was last saved — the card comes back mid-search
+  // rather than blank, and an address typed straight into the config is picked up the same way
+  const initialAddressRef = useRef(typeof comp?.address === "string" ? comp.address : "");
+  const initialPinRef = useRef(savedPin(comp));
   // Read on every render, so editing `basemap` in the card's config restyles the live map
   const styleUrl = resolveStyleUrl(comp);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -229,7 +246,7 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
     compRef.current = comp;
     saveRef.current = save;
   }, [comp, save]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(initialAddressRef.current);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [dropping, setDropping] = useState(false);
@@ -255,6 +272,10 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
     // The compass doubles as the pitch handle, which is how you get under the 3D buildings
     map.addControl(new mapboxgl.NavigationControl({ showCompass: true, visualizePitch: true }), "top-right");
     mapRef.current = map;
+
+    // The saved view already points at the address; the pin is what says which spot it is
+    const pin = initialPinRef.current;
+    if (pin) searchMarkerRef.current = new mapboxgl.Marker({ color: "black" }).setLngLat(pin).addTo(map);
 
     const applyStyleExtras = () => {
       const standard = isStandard(styleUrlRef.current);
@@ -378,6 +399,42 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
     return () => window.removeEventListener("languagechange", applyLanguage);
   }, [i18n.language]);
 
+  // An address typed into the config by hand has no coordinates with it, so there is nothing to
+  // put on the map until it has been looked up once — after that the pin comes back from the save
+  useEffect(() => {
+    const address = initialAddressRef.current;
+    if (!address || initialPinRef.current || !mapRef.current) return;
+    void runSearch(address);
+    // Only ever on mount: once the lookup lands it writes coordinates back, and re-running on
+    // every address change would fight the box the reader is typing in
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The address belongs to the card, not to this page view: it goes back into the config next to
+  // the coordinates the pin needs
+  function persistAddress(address: string, lngLat: [number, number]) {
+    const current = compRef.current ?? {};
+    const next = {
+      address,
+      addressLng: Number(lngLat[0].toFixed(6)),
+      addressLat: Number(lngLat[1].toFixed(6)),
+    };
+    const unchanged = (Object.keys(next) as Array<keyof typeof next>).every((key) => current[key] === next[key]);
+    if (unchanged) return;
+    saveRef.current?.({ ...current, ...next });
+  }
+
+  function forgetAddress() {
+    const current = compRef.current;
+    if (!current) return;
+    if (current.address === undefined && current.addressLng === undefined && current.addressLat === undefined) return;
+    const next: Record<string, unknown> = { ...current };
+    delete next.address;
+    delete next.addressLng;
+    delete next.addressLat;
+    saveRef.current?.(next);
+  }
+
   async function runSearch(query: string) {
     const address = query.trim();
     const map = mapRef.current;
@@ -398,6 +455,7 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
       map.flyTo({ center: lngLat, zoom: 17, duration: 1_500 });
       searchMarkerRef.current?.remove();
       searchMarkerRef.current = new mapboxgl.Marker({ color: "black" }).setLngLat(lngLat).addTo(map);
+      persistAddress(address, lngLat);
     } catch (error) {
       console.error("Geocoding failed:", error);
       setSearchError(strings.error);
@@ -418,6 +476,7 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
     setSearchError(null);
     searchMarkerRef.current?.remove();
     searchMarkerRef.current = null;
+    forgetAddress();
     searchInputRef.current?.focus();
   }
 

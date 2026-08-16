@@ -24,7 +24,11 @@ export const config = {
         },
         {
           key: { en: "Address search", ja: "住所検索", zh: "地址搜索" },
-          value: { en: "Google Maps Geocoder", ja: "Google Maps Geocoder", zh: "Google Maps Geocoder" },
+          value: {
+            en: "Google Maps Geocoder; the address is kept in this card's config as address, so it survives a reload",
+            ja: "Google Maps Geocoder。検索した住所はカード設定の address に保存され、再読み込み後も残ります",
+            zh: "Google Maps Geocoder；搜索的地址会保存在卡片配置的 address 中，刷新后依然保留",
+          },
         },
         {
           key: { en: "Credentials", ja: "認証情報", zh: "凭据" },

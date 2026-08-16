@@ -17,9 +17,9 @@ export const config = {
         {
           key: { en: "Day plans", ja: "日別予定", zh: "每日计划" },
           value: {
-            en: "Flights, rental cars, linked multi-day hotel stays, events and custom expenses include itemized costs, plus free-form notes",
-            ja: "フライト、レンタカー、複数日に連動するホテル、イベント、自由入力の費用明細とノート",
-            zh: "航班、租车、跨日联动酒店、活动和自定义费用均计入费用明细，并提供自由笔记",
+            en: "Flights, trains, rental cars, linked multi-day hotel stays, events and custom expenses include itemized costs, plus free-form notes. Drag an entry by its title bar to reorder the day",
+            ja: "フライト、列車、レンタカー、複数日に連動するホテル、イベント、自由入力の費用明細とノート。見出しをドラッグすると同じ日の並び順を変更できます",
+            zh: "航班、火车、租车、跨日联动酒店、活动和自定义费用均计入费用明细，并提供自由笔记。拖动条目标题栏可调整当天顺序",
           },
         },
         {

@@ -306,6 +306,14 @@
   stroke: none;
 }
 
+/* The two vehicles are the icons drawn in curves rather than straight runs, and a mitred join
+   spikes where two of them meet at a shallow angle */
+.addButton .carIcon,
+.addButton .trainIcon {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .addButton:hover,
 .addButton:active {
   background: #f5f5f5;
@@ -330,11 +338,32 @@
   background: #fff;
 }
 
+/* Lifted clear of the cards it is being dragged past, and out from under the day below */
+.entryDragging {
+  position: relative;
+  z-index: 10;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
 .entryTop {
   display: flex;
   align-items: center;
   gap: 6px;
   margin-bottom: 5px;
+}
+
+/* Only set on a day holding more than one entry — the one card that has nowhere to go is not
+   worth taking a touch scroll away from */
+.entryTop[data-drag] {
+  cursor: grab;
+  /* A drag of the title bar is a drag, not the card scrolling under the finger */
+  touch-action: none;
+  /* Nothing here is worth selecting, and a press that selects the label reads as a failed drag */
+  user-select: none;
+}
+
+.entryDragging .entryTop[data-drag] {
+  cursor: grabbing;
 }
 
 .entryType {
@@ -648,8 +677,9 @@
 
 .noteArea {
   box-sizing: border-box;
-  height: 70px;
-  min-height: 70px;
+  /* two lines: 2 × 18px text + 14px padding + 2px border */
+  height: 52px;
+  min-height: 52px;
   padding: 7px;
   border: 1px solid #000;
   border-radius: 0;
