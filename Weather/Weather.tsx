@@ -414,6 +414,40 @@ export default function Weather({ config }: { config: Record<string, unknown> })
     };
   }, [place, location, refreshMinutes]);
 
+  // What the Refresh button re-runs: the current conditions for the place already resolved — the
+  // same single request the timer above makes. Nothing runs on the server; the Wolfram baseline in
+  // data/ is refresh.sh's business, on a cron or by hand. Before a place has resolved (or right
+  // after the location changed) there is nothing to re-fetch, so the whole load is asked for again.
+  async function reload() {
+    if (!place || place.query.toLowerCase() !== location.toLowerCase()) {
+      setReloadKey((n) => n + 1);
+      return;
+    }
+    try {
+      const current = await fetchCurrentWeather(place, place.timezone);
+      setWeather(current);
+      setStatus("ready");
+    } catch {
+      // Leave what is on screen alone, as the timer does: a reading that failed to update is
+      // still a reading, and blanking the card would say less than the stale number does.
+    }
+  }
+
+  // Read through a ref so the handler registered below stays the same function for the life of the
+  // card, rather than re-registering — and re-rendering the board — whenever the place changes.
+  const reloadRef = useRef(reload);
+  useEffect(() => {
+    reloadRef.current = reload;
+  });
+
+  // Registering is what gives the card its Refresh button; unregistering on unmount takes it away.
+  useEffect(() => {
+    const setRefresh = config._setRefresh as ((fn: (() => void | Promise<void>) | null) => void) | undefined;
+    setRefresh?.(() => reloadRef.current());
+    return () => setRefresh?.(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // The hourly row scrolls sideways, but a mouse wheel only produces deltaY — over this row it would
   // scroll the card past the hours instead of through them. Re-aiming that delta needs a native
   // non-passive listener: React registers onWheel passively on the root, where preventDefault() is

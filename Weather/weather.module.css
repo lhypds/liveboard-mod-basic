@@ -1,3 +1,7 @@
+/* Scrolls on both axes, not just the y this asks for: an `auto` on one axis promotes the other's
+   `visible` to `auto` as well, so the card also scrolls sideways whenever .suggestions is open and
+   wider than the card. Both bars are hidden — the card is a fixed frame on a board, and a pair of
+   grey rails inside its 1px border reads as chrome the board doesn't otherwise have. */
 .container {
   height: 100%;
   display: flex;
@@ -7,10 +11,7 @@
   font-size: 12px;
   overflow-y: auto;
   scrollbar-width: none;
-}
-
-.container::-webkit-scrollbar {
-  display: none;
+  -ms-overflow-style: none;
 }
 
 .hint {
@@ -213,6 +214,8 @@
   list-style: none;
   max-height: 160px;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   border: 1px solid black;
   background: white;
 }
@@ -293,6 +296,10 @@
   -ms-overflow-style: none;
 }
 
+/* `scrollbar-width` only landed in Safari 18.4, and this board is also read on an old iPad, so the
+   three scrollers keep the -webkit- form too */
+.container::-webkit-scrollbar,
+.suggestions::-webkit-scrollbar,
 .hourlyRow::-webkit-scrollbar {
   display: none;
 }
