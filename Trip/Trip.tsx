@@ -118,6 +118,7 @@ const TEXT: Record<string, Record<Lang, string>> = {
     zh: "要去哪里？",
   },
   summaryNote: { en: "Trip summary note", ja: "旅行サマリーのノート", zh: "行程摘要备注" },
+  summaryNotePlaceholder: { en: "Trip overview", ja: "旅程の概要", zh: "行程概要" },
   totalCost: { en: "Total cost", ja: "合計費用", zh: "总费用" },
   costBreakdown: { en: "Cost breakdown", ja: "費用明細", zh: "费用明细" },
   showChart: { en: "Show pie chart", ja: "円グラフを表示", zh: "显示饼图" },
@@ -235,6 +236,12 @@ function readDay(value: unknown, fallbackCurrency = "JPY"): DayPlan {
       })
     : [];
   return { note: textValue(value.note), entries };
+}
+
+function placeEntry(entries: TripEntry[], groupId: string, next: TripEntry): TripEntry[] {
+  const index = entries.findIndex((entry) => (entry.groupId || entry.id) === groupId);
+  if (index < 0) return [...entries, next];
+  return entries.map((entry, position) => (position === index ? next : entry));
 }
 
 function parseDate(value: string): number | null {
@@ -712,16 +719,16 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
 
   function syncHotel(hotel: TripEntry) {
     const groupId = hotel.groupId || hotel.id;
-    const nextDays: Record<string, unknown> = Object.fromEntries(
-      Object.entries(storedDays).map(([date, value]) => {
-        const day = readDay(value, currency);
-        return [date, { ...day, entries: day.entries.filter((entry) => entry.groupId !== groupId) }];
-      }),
-    );
-    const coveredDates = range.dates.filter((date) => date >= hotel.stayFrom && date <= hotel.stayTo);
-    for (const date of coveredDates) {
+    const coveredDates = new Set(range.dates.filter((date) => date >= hotel.stayFrom && date <= hotel.stayTo));
+    const nextDays: Record<string, unknown> = { ...storedDays };
+    for (const date of new Set([...Object.keys(storedDays), ...coveredDates])) {
       const day = readDay(nextDays[date], currency);
-      nextDays[date] = { ...day, entries: [...day.entries, { ...hotel, id: `${groupId}:${date}`, groupId }] };
+      nextDays[date] = {
+        ...day,
+        entries: coveredDates.has(date)
+          ? placeEntry(day.entries, groupId, { ...hotel, id: `${groupId}:${date}`, groupId })
+          : day.entries.filter((entry) => (entry.groupId || entry.id) !== groupId),
+      };
     }
     commitDays(nextDays);
   }
@@ -730,24 +737,18 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
     const groupId = flight.groupId || flight.id;
     const originDate = flight.roundTripOriginDate || currentDate;
     const syncedFlight = { ...flight, groupId, roundTrip: true, roundTripOriginDate: originDate };
-    const nextDays: Record<string, unknown> = Object.fromEntries(
-      Object.entries(storedDays).map(([date, value]) => {
-        const day = readDay(value, currency);
-        return [date, {
-          ...day,
-          entries: day.entries.filter((entry) => (
-            entry.type !== "flight" || (entry.groupId || entry.id) !== groupId
-          )),
-        }];
-      }),
-    );
     const displayDates = new Set([originDate]);
     if (range.dates.includes(flight.returnDepartureDate)) displayDates.add(flight.returnDepartureDate);
-    for (const displayDate of displayDates) {
-      const day = readDay(nextDays[displayDate], currency);
-      nextDays[displayDate] = {
+    const nextDays: Record<string, unknown> = { ...storedDays };
+    for (const date of new Set([...Object.keys(storedDays), ...displayDates])) {
+      const day = readDay(nextDays[date], currency);
+      nextDays[date] = {
         ...day,
-        entries: [...day.entries, { ...syncedFlight, id: `${groupId}:${displayDate}` }],
+        entries: displayDates.has(date)
+          ? placeEntry(day.entries, groupId, { ...syncedFlight, id: `${groupId}:${date}` })
+          : day.entries.filter((entry) => (
+            entry.type !== "flight" || (entry.groupId || entry.id) !== groupId
+          )),
       };
     }
     commitDays(nextDays);
@@ -756,32 +757,29 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
   function detachRoundTripFlight(flight: TripEntry, currentDate: string) {
     const groupId = flight.groupId || flight.id;
     const originDate = flight.roundTripOriginDate || currentDate;
-    const nextDays: Record<string, unknown> = Object.fromEntries(
-      Object.entries(storedDays).map(([date, value]) => {
-        const day = readDay(value, currency);
-        return [date, {
-          ...day,
-          entries: day.entries.filter((entry) => (
+    const detached = {
+      ...flight,
+      id: groupId,
+      groupId: "",
+      roundTrip: false,
+      roundTripOriginDate: "",
+      returnDepartureDate: "",
+      returnDepartureTime: "",
+      returnArrivalDate: "",
+      returnArrivalTime: "",
+    };
+    const nextDays: Record<string, unknown> = { ...storedDays };
+    for (const date of new Set([...Object.keys(storedDays), originDate])) {
+      const day = readDay(nextDays[date], currency);
+      nextDays[date] = {
+        ...day,
+        entries: date === originDate
+          ? placeEntry(day.entries, groupId, detached)
+          : day.entries.filter((entry) => (
             entry.type !== "flight" || (entry.groupId || entry.id) !== groupId
           )),
-        }];
-      }),
-    );
-    const day = readDay(nextDays[originDate], currency);
-    nextDays[originDate] = {
-      ...day,
-      entries: [...day.entries, {
-        ...flight,
-        id: groupId,
-        groupId: "",
-        roundTrip: false,
-        roundTripOriginDate: "",
-        returnDepartureDate: "",
-        returnDepartureTime: "",
-        returnArrivalDate: "",
-        returnArrivalTime: "",
-      }],
-    };
+      };
+    }
     commitDays(nextDays);
   }
 
@@ -1021,9 +1019,10 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
             <div className={styles.summaryNoteWrap}>
               <TextArea
                 className={styles.noteArea}
-                minHeight={45}
-                rows={2}
+                minHeight={70}
+                rows={3}
                 value={textValue(comp.summaryNote)}
+                placeholder={TEXT.summaryNotePlaceholder[lang]}
                 aria-label={TEXT.summaryNote[lang]}
                 onChange={(event) => commit({ summaryNote: event.target.value })}
               />
@@ -1088,7 +1087,7 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
                               label={TEXT[entry.type][lang]}
                               value={entry.title}
                               placeholder={TITLE_PLACEHOLDER[entry.type][lang]}
-                              hideLabel={entry.type !== "event"}
+                              hideLabel
                               onChange={(value) => updateEntry(date, entry.id, { title: value })}
                             />
                             {entry.type === "flight" && !isReturnFlightDay(date, entry) && (
@@ -1109,35 +1108,39 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
                               <>
                                 {!isReturnFlightDay(date, entry) && (
                                   <>
-                                    <DateTimeField
-                                      label={TEXT.departure[lang]}
-                                      date={entry.departureDate}
-                                      time={entry.departureTime}
-                                      locale={locale}
-                                      lang={lang}
-                                      datePickerLabels={datePickerLabels}
-                                      min={startDate}
-                                      max={endDate}
-                                      onDateChange={(value) => updateEntry(date, entry.id, {
-                                        departureDate: value,
-                                        ...(entry.arrivalDate && value > entry.arrivalDate ? { arrivalDate: value } : {}),
-                                      })}
-                                      onTimeChange={(value) => updateEntry(date, entry.id, { departureTime: value })}
-                                    />
-                                    <InputField label={TEXT.from[lang]} lang={lang} mapSearch value={entry.fromLocation} onChange={(value) => updateEntry(date, entry.id, { fromLocation: value })} />
-                                    <DateTimeField
-                                      label={TEXT.arrival[lang]}
-                                      date={entry.arrivalDate}
-                                      time={entry.arrivalTime}
-                                      locale={locale}
-                                      lang={lang}
-                                      datePickerLabels={datePickerLabels}
-                                      min={entry.departureDate || startDate}
-                                      max={endDate}
-                                      onDateChange={(value) => updateEntry(date, entry.id, { arrivalDate: value })}
-                                      onTimeChange={(value) => updateEntry(date, entry.id, { arrivalTime: value })}
-                                    />
-                                    <InputField label={TEXT.to[lang]} lang={lang} mapSearch value={entry.toLocation} onChange={(value) => updateEntry(date, entry.id, { toLocation: value })} />
+                                    <div className={styles.fieldRow}>
+                                      <InputField label={TEXT.from[lang]} lang={lang} mapSearch value={entry.fromLocation} onChange={(value) => updateEntry(date, entry.id, { fromLocation: value })} />
+                                      <DateTimeField
+                                        label={TEXT.departure[lang]}
+                                        date={entry.departureDate}
+                                        time={entry.departureTime}
+                                        locale={locale}
+                                        lang={lang}
+                                        datePickerLabels={datePickerLabels}
+                                        min={startDate}
+                                        max={endDate}
+                                        onDateChange={(value) => updateEntry(date, entry.id, {
+                                          departureDate: value,
+                                          ...(entry.arrivalDate && value > entry.arrivalDate ? { arrivalDate: value } : {}),
+                                        })}
+                                        onTimeChange={(value) => updateEntry(date, entry.id, { departureTime: value })}
+                                      />
+                                    </div>
+                                    <div className={styles.fieldRow}>
+                                      <InputField label={TEXT.to[lang]} lang={lang} mapSearch value={entry.toLocation} onChange={(value) => updateEntry(date, entry.id, { toLocation: value })} />
+                                      <DateTimeField
+                                        label={TEXT.arrival[lang]}
+                                        date={entry.arrivalDate}
+                                        time={entry.arrivalTime}
+                                        locale={locale}
+                                        lang={lang}
+                                        datePickerLabels={datePickerLabels}
+                                        min={entry.departureDate || startDate}
+                                        max={endDate}
+                                        onDateChange={(value) => updateEntry(date, entry.id, { arrivalDate: value })}
+                                        onTimeChange={(value) => updateEntry(date, entry.id, { arrivalTime: value })}
+                                      />
+                                    </div>
                                   </>
                                 )}
                                 {entry.roundTrip && (
@@ -1182,35 +1185,39 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
                             )}
                             {entry.type === "car" && (
                               <>
-                                <DateTimeField
-                                  label={TEXT.pickupTime[lang]}
-                                  date={entry.departureDate}
-                                  time={entry.departureTime}
-                                  locale={locale}
-                                  lang={lang}
-                                  datePickerLabels={datePickerLabels}
-                                  min={startDate}
-                                  max={endDate}
-                                  onDateChange={(value) => updateEntry(date, entry.id, {
-                                    departureDate: value,
-                                    ...(entry.arrivalDate && value > entry.arrivalDate ? { arrivalDate: value } : {}),
-                                  })}
-                                  onTimeChange={(value) => updateEntry(date, entry.id, { departureTime: value })}
-                                />
-                                <InputField label={TEXT.from[lang]} lang={lang} mapSearch value={entry.fromLocation} onChange={(value) => updateEntry(date, entry.id, { fromLocation: value })} />
-                                <DateTimeField
-                                  label={TEXT.returnTime[lang]}
-                                  date={entry.arrivalDate}
-                                  time={entry.arrivalTime}
-                                  locale={locale}
-                                  lang={lang}
-                                  datePickerLabels={datePickerLabels}
-                                  min={entry.departureDate || startDate}
-                                  max={endDate}
-                                  onDateChange={(value) => updateEntry(date, entry.id, { arrivalDate: value })}
-                                  onTimeChange={(value) => updateEntry(date, entry.id, { arrivalTime: value })}
-                                />
-                                <InputField label={TEXT.to[lang]} lang={lang} mapSearch value={entry.toLocation} onChange={(value) => updateEntry(date, entry.id, { toLocation: value })} />
+                                <div className={styles.fieldRow}>
+                                  <InputField label={TEXT.from[lang]} lang={lang} mapSearch value={entry.fromLocation} onChange={(value) => updateEntry(date, entry.id, { fromLocation: value })} />
+                                  <DateTimeField
+                                    label={TEXT.pickupTime[lang]}
+                                    date={entry.departureDate}
+                                    time={entry.departureTime}
+                                    locale={locale}
+                                    lang={lang}
+                                    datePickerLabels={datePickerLabels}
+                                    min={startDate}
+                                    max={endDate}
+                                    onDateChange={(value) => updateEntry(date, entry.id, {
+                                      departureDate: value,
+                                      ...(entry.arrivalDate && value > entry.arrivalDate ? { arrivalDate: value } : {}),
+                                    })}
+                                    onTimeChange={(value) => updateEntry(date, entry.id, { departureTime: value })}
+                                  />
+                                </div>
+                                <div className={styles.fieldRow}>
+                                  <InputField label={TEXT.to[lang]} lang={lang} mapSearch value={entry.toLocation} onChange={(value) => updateEntry(date, entry.id, { toLocation: value })} />
+                                  <DateTimeField
+                                    label={TEXT.returnTime[lang]}
+                                    date={entry.arrivalDate}
+                                    time={entry.arrivalTime}
+                                    locale={locale}
+                                    lang={lang}
+                                    datePickerLabels={datePickerLabels}
+                                    min={entry.departureDate || startDate}
+                                    max={endDate}
+                                    onDateChange={(value) => updateEntry(date, entry.id, { arrivalDate: value })}
+                                    onTimeChange={(value) => updateEntry(date, entry.id, { arrivalTime: value })}
+                                  />
+                                </div>
                                 <CostField
                                   label={TEXT.cost[lang]}
                                   value={entry.cost}
@@ -1275,7 +1282,7 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
                             )}
                             {entry.type === "event" && (
                               <>
-                                <div className={styles.fieldGrid}>
+                                <div className={styles.fieldRow}>
                                   <InputField label={TEXT.time[lang]} type="time" lang={lang} value={entry.time} onChange={(value) => updateEntry(date, entry.id, { time: value })} />
                                   <InputField label={TEXT.location[lang]} lang={lang} mapSearch value={entry.location} onChange={(value) => updateEntry(date, entry.id, { location: value })} />
                                 </div>
@@ -1306,8 +1313,8 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
                     <div className={styles.noteWrap}>
                       <TextArea
                         className={styles.noteArea}
-                        minHeight={45}
-                        rows={2}
+                        minHeight={70}
+                        rows={3}
                         value={day.note}
                         aria-label={`${dayNumberLabel(dayIndex + 1, lang)} note`}
                         onChange={(event) => updateDay(date, (current) => ({ ...current, note: event.target.value }))}

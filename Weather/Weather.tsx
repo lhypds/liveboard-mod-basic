@@ -39,6 +39,10 @@ const SUGGESTION_COUNT = 6;
 const SEARCH_DEBOUNCE_MS = 250;
 const MIN_QUERY_LENGTH = 2;
 
+// What one wheel "line" is worth in pixels, for the browsers that report wheel deltas in lines.
+// Matches the row's own 16px line box, so a notch moves about as far as one there.
+const WHEEL_LINE_HEIGHT = 16;
+
 // What the card carries over between loads, kept in its own config (comp.cache) so it travels with
 // an exported or server-synced layout instead of sitting in this browser's localStorage. Two things
 // earn their place: the place the location resolved to — a pick from the dropdown has to keep its
@@ -121,56 +125,84 @@ function useLang(): Lang {
   return (i18n.language as Lang) in STRINGS.noLocation ? (i18n.language as Lang) : "en";
 }
 
+// One cloud, drawn once and then scaled and placed per state, so the cloud stays recognisably the
+// same object whether it is overcast, raining or snowing — the old set redrew it slightly
+// differently in every glyph, which showed up as a wobble when the hourly row put them side by side.
+const CLOUD = "M7.5 18A4 4 0 0 1 7.5 10A6 6 0 0 1 16.5 10A4 4 0 0 1 16.5 18Z";
+// Shrunk and lifted, freeing the bottom third of the box for rain, snow, mist or a bolt.
+const CLOUD_RAISED = "translate(1.44 -3.5) scale(.88)";
+// Low and to the right, so the sun behind it keeps its top and left rays.
+const CLOUD_OVER_SUN = "translate(3.47 4) scale(.78)";
+// A second, paler cloud peeking over the first — what tells overcast from partly cloudy at a glance.
+const CLOUD_BACKDROP = "translate(7.33 0) scale(.62)";
+
 function WeatherIconGlyph({ icon }: { icon: WeatherIcon }) {
   switch (icon) {
     case "clear":
       return (
         <svg viewBox="0 0 24 24" className={styles.icon}>
-          <circle cx="12" cy="12" r="4" />
-          <path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" />
+          <circle className={styles.iconSun} cx="12" cy="12" r="4.4" />
+          <path
+            className={styles.iconRay}
+            d="M12 5.6V3M12 18.4V21M5.6 12H3M18.4 12H21M7.47 7.47 5.64 5.64M16.53 16.53 18.36 18.36M7.47 16.53 5.64 18.36M16.53 7.47 18.36 5.64"
+          />
         </svg>
       );
     case "partly-cloudy":
+      // The rays that point into the cloud are drawn in full and then covered by it, so the sun is
+      // one whole sun sitting behind one whole cloud — no clipping, no mask, nothing to keep in
+      // sync if either shape moves.
       return (
         <svg viewBox="0 0 24 24" className={styles.icon}>
-          <circle cx="9" cy="8" r="3" />
-          <path d="M9 2v2M13.8 4.2l-1.4 1.4M3 8h2" />
-          <path d="M8 20h9a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.4-2A4.5 4.5 0 0 0 8 20z" />
+          <circle className={styles.iconSun} cx="9" cy="8.8" r="3.6" />
+          <path
+            className={`${styles.iconRay} ${styles.iconRaySmall}`}
+            d="M9 3.7V2.1M9 13.9V15.5M3.9 8.8H2.3M14.1 8.8H15.7M5.39 5.19 4.26 4.06M12.61 12.41 13.74 13.54M5.39 12.41 4.26 13.54M12.61 5.19 13.74 4.06"
+          />
+          <path className={styles.iconCloud} d={CLOUD} transform={CLOUD_OVER_SUN} />
         </svg>
       );
     case "fog":
       return (
         <svg viewBox="0 0 24 24" className={styles.icon}>
-          <path d="M6 16h9a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.4-2A4.5 4.5 0 0 0 6 15" />
-          <path d="M4 19h16M4 22h16" />
+          <path className={styles.iconCloud} d={CLOUD} transform={CLOUD_RAISED} />
+          {/* Offset from each other rather than stacked flush, so the mist reads as drifting */}
+          <path className={styles.iconMist} d="M4.8 15.2H17.2M7.2 19.4H19.4" />
         </svg>
       );
     case "rain":
       return (
         <svg viewBox="0 0 24 24" className={styles.icon}>
-          <path d="M7 14h9a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.4-2A4.5 4.5 0 0 0 7 13" />
-          <path d="M8 18l-1.5 3M12 18l-1.5 3M16 18l-1.5 3" />
+          <path className={styles.iconCloud} d={CLOUD} transform={CLOUD_RAISED} />
+          <path className={styles.iconRain} d="M8.6 15.2 7.5 18.4M12.6 16 11.5 19.4M16.6 15.2 15.5 18.4" />
         </svg>
       );
     case "snow":
       return (
         <svg viewBox="0 0 24 24" className={styles.icon}>
-          <path d="M7 14h9a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.4-2A4.5 4.5 0 0 0 7 13" />
-          <path d="M9 18v4M7 19.5l4 1M11 19.5l-4 1M15 18v4M13 19.5l4 1M17 19.5l-4 1" />
+          <path className={styles.iconCloud} d={CLOUD} transform={CLOUD_RAISED} />
+          <path
+            className={styles.iconSnow}
+            d="M9 14.5V19.1M7.01 15.65 10.99 17.95M7.01 17.95 10.99 15.65M15 14.5V19.1M13.01 15.65 16.99 17.95M13.01 17.95 16.99 15.65"
+          />
+          {/* A third flake would be six more arms in the gap between the two; a grain keeps the
+              falling rhythm without turning into a smudge at 20px. */}
+          <circle className={styles.iconSnowGrain} cx="12" cy="20.6" r="1" />
         </svg>
       );
     case "storm":
       return (
         <svg viewBox="0 0 24 24" className={styles.icon}>
-          <path d="M7 13h9a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.4-2A4.5 4.5 0 0 0 7 12" />
-          <path d="M12 15l-3 5h3l-1 4 4-6h-3l1-3z" />
+          <path className={styles.iconCloud} d={CLOUD} transform={CLOUD_RAISED} />
+          <path className={styles.iconBolt} d="M12.6 13 8.2 18.3h4l-.5 3.5 4.4-5.3h-4l.5-3.5Z" />
         </svg>
       );
     case "cloudy":
     default:
       return (
         <svg viewBox="0 0 24 24" className={styles.icon}>
-          <path d="M6 18h10a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.4-1.5A4.5 4.5 0 0 0 6 18z" />
+          <path className={styles.iconCloudBack} d={CLOUD} transform={CLOUD_BACKDROP} />
+          <path className={styles.iconCloud} d={CLOUD} />
         </svg>
       );
   }
@@ -382,6 +414,38 @@ export default function Weather({ config }: { config: Record<string, unknown> })
     };
   }, [place, location, refreshMinutes]);
 
+  // The hourly row scrolls sideways, but a mouse wheel only produces deltaY — over this row it would
+  // scroll the card past the hours instead of through them. Re-aiming that delta needs a native
+  // non-passive listener: React registers onWheel passively on the root, where preventDefault() is
+  // ignored. Re-runs with `weather` because the row only exists once there is something to show.
+  const hourlyRowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const row = hourlyRowRef.current;
+    if (!row) return;
+
+    function onWheel(e: WheelEvent) {
+      // Trackpads and tilt wheels already send a horizontal delta — leave those to the browser.
+      if (!row || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      const max = row.scrollWidth - row.clientWidth;
+      if (max <= 0) return;
+      // Firefox reports lines rather than pixels, and a page delta is one screenful of the row.
+      const step =
+        e.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? e.deltaY * WHEEL_LINE_HEIGHT
+          : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? e.deltaY * row.clientWidth
+            : e.deltaY;
+      // At either end the wheel goes back to scrolling the card, so a card taller than its window
+      // can't be made unscrollable by parking the pointer over this row.
+      if ((step < 0 && row.scrollLeft <= 0) || (step > 0 && row.scrollLeft >= max - 0.5)) return;
+      e.preventDefault();
+      row.scrollLeft += step;
+    }
+
+    row.addEventListener("wheel", onWheel, { passive: false });
+    return () => row.removeEventListener("wheel", onWheel);
+  }, [weather]);
+
   // The box stays on screen in every state — a wrong or unknown location has to be fixable without
   // opening the config editor.
   const locationField = (
@@ -535,7 +599,7 @@ export default function Weather({ config }: { config: Record<string, unknown> })
       {weather.hourly.length > 0 && (
         <div className={styles.hourlySection}>
           <div className={styles.hourlyTitle}>{STRINGS.next24h[lang]}</div>
-          <div className={styles.hourlyRow}>
+          <div className={styles.hourlyRow} ref={hourlyRowRef}>
             {weather.hourly.map((hour, i) => {
               const hourCode = describeWeatherCode(hour.weatherCode);
               return (

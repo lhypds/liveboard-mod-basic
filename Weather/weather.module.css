@@ -24,15 +24,73 @@
   gap: 10px;
 }
 
+/* Each part of a glyph paints itself from the palette below, so the svg only carries what all of
+   them share. The clouds are filled rather than outlined: solid shapes survive the 20px the hourly
+   and daily rows render at, where hairline strokes collapse into grey mush, and an opaque cloud is
+   what lets the sun sit behind one in `partly-cloudy` without any masking. */
 .icon {
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   flex-shrink: 0;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
+  --wx-sun: #f59e0b;
+  --wx-cloud: #94a3b8;
+  --wx-cloud-back: #cbd5e1;
+  --wx-rain: #0ea5e9;
+  --wx-snow: #38bdf8;
+}
+
+.iconSun {
+  fill: var(--wx-sun);
+}
+
+.iconRay {
+  fill: none;
+  stroke: var(--wx-sun);
+  stroke-width: 2;
+}
+
+/* The sun in `partly-cloudy` is smaller than the one in `clear`, so its rays thin out with it. */
+.iconRaySmall {
+  stroke-width: 1.7;
+}
+
+.iconCloud {
+  fill: var(--wx-cloud);
+}
+
+/* Sits behind .iconCloud and only peeks out, so it reads as depth rather than as a second object */
+.iconCloudBack {
+  fill: var(--wx-cloud-back);
+}
+
+.iconMist {
+  fill: none;
+  stroke: var(--wx-cloud);
+  stroke-width: 2;
+}
+
+.iconRain {
+  fill: none;
+  stroke: var(--wx-rain);
+  stroke-width: 2;
+}
+
+/* Thinner than the rain strokes: a flake packs six arms into the space one raindrop uses, and at
+   2 they merge into a blob once the glyph is down at 20px. */
+.iconSnow {
+  fill: none;
+  stroke: var(--wx-snow);
+  stroke-width: 1.6;
+}
+
+.iconSnowGrain {
+  fill: var(--wx-snow);
+}
+
+.iconBolt {
+  fill: var(--wx-sun);
 }
 
 .headerText {
@@ -47,7 +105,7 @@
 }
 
 .temperature {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 500;
   line-height: 1.1;
 }
@@ -55,7 +113,7 @@
 /* Day-over-day delta beside the current temperature. The sign carries the same meaning as the
    colour, so the reading survives PNG export, greyscale printing and colour-blind viewers. */
 .yesterdayDelta {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 400;
   /* Same proportional line box as .temperature, so the first baseline lands in the same place by
      construction instead of depending on how each engine resolves `normal` half-leading. */
@@ -65,7 +123,7 @@
 
 .warmerThanYesterday {
   /* Golden amber rather than the darker ochre it used to be: reads as warm instead of rust-red,
-     while staying above 4.5:1 on white so the 18px delta is still legible without leaning on colour. */
+     while staying above 4.5:1 on white so the 16px delta is still legible without leaning on colour. */
   color: #a56c09;
 }
 
