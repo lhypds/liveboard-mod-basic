@@ -125,6 +125,7 @@ const TEXT: Record<string, Record<Lang, string>> = {
   fxUpdated: { en: "Exchange rates", ja: "為替レート", zh: "汇率更新" },
   retry: { en: "Retry", ja: "再試行", zh: "重试" },
   add: { en: "Add", ja: "追加", zh: "添加" },
+  searchLocation: { en: "Search on Google", ja: "Googleで検索", zh: "用谷歌搜索" },
 };
 
 const TITLE_PLACEHOLDER: Record<EntryType, Record<Lang, string>> = {
@@ -365,6 +366,21 @@ function EntryIcon({ type }: { type: EntryType }) {
   );
 }
 
+function MarkerIcon() {
+  return (
+    <svg viewBox="0 0 18 18" aria-hidden="true">
+      <path d="M9 16.5c3.4-3.9 5.2-6.7 5.2-8.7a5.2 5.2 0 1 0-10.4 0c0 2 1.8 4.8 5.2 8.7Z" />
+      <circle cx="9" cy="7.6" r="1.9" />
+    </svg>
+  );
+}
+
+function openLocationSearch(location: string) {
+  const query = location.trim();
+  if (!query) return;
+  window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`, "_blank", "noopener,noreferrer");
+}
+
 function formatTimeInput(raw: string): string | null {
   const digits = raw.replace(/\D/g, "").slice(0, 4);
   if (digits.length >= 2 && (Number(digits.slice(0, 2)) < 1 || Number(digits.slice(0, 2)) > 12)) return null;
@@ -447,6 +463,7 @@ function InputField({
   placeholder,
   hideLabel = false,
   lang = "en",
+  mapSearch = false,
 }: {
   label: string;
   value: string;
@@ -455,23 +472,42 @@ function InputField({
   placeholder?: string;
   hideLabel?: boolean;
   lang?: Lang;
+  mapSearch?: boolean;
 }) {
+  const field = (
+    <input
+      type={type}
+      value={value}
+      placeholder={placeholder}
+      aria-label={hideLabel ? label : undefined}
+      min={type === "number" ? "0" : undefined}
+      step={type === "number" ? "0.01" : undefined}
+      inputMode={type === "number" ? "decimal" : undefined}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  );
+
   return (
     <label className={styles.inputField}>
       {!hideLabel && <span>{label}</span>}
       {type === "time" ? (
         <TimeInput value={value} ariaLabel={label} lang={lang} onChange={onChange} />
+      ) : mapSearch ? (
+        <div className={styles.locationControl}>
+          {field}
+          <button
+            type="button"
+            className={styles.mapButton}
+            disabled={!value.trim()}
+            aria-label={`${label} ${TEXT.searchLocation[lang]}`}
+            title={TEXT.searchLocation[lang]}
+            onClick={() => openLocationSearch(value)}
+          >
+            <MarkerIcon />
+          </button>
+        </div>
       ) : (
-        <input
-          type={type}
-          value={value}
-          placeholder={placeholder}
-          aria-label={hideLabel ? label : undefined}
-          min={type === "number" ? "0" : undefined}
-          step={type === "number" ? "0.01" : undefined}
-          inputMode={type === "number" ? "decimal" : undefined}
-          onChange={(event) => onChange(event.target.value)}
-        />
+        field
       )}
     </label>
   );
@@ -1080,7 +1116,7 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
                                       })}
                                       onTimeChange={(value) => updateEntry(date, entry.id, { departureTime: value })}
                                     />
-                                    <InputField label={TEXT.from[lang]} value={entry.fromLocation} onChange={(value) => updateEntry(date, entry.id, { fromLocation: value })} />
+                                    <InputField label={TEXT.from[lang]} lang={lang} mapSearch value={entry.fromLocation} onChange={(value) => updateEntry(date, entry.id, { fromLocation: value })} />
                                     <DateTimeField
                                       label={TEXT.arrival[lang]}
                                       date={entry.arrivalDate}
@@ -1093,7 +1129,7 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
                                       onDateChange={(value) => updateEntry(date, entry.id, { arrivalDate: value })}
                                       onTimeChange={(value) => updateEntry(date, entry.id, { arrivalTime: value })}
                                     />
-                                    <InputField label={TEXT.to[lang]} value={entry.toLocation} onChange={(value) => updateEntry(date, entry.id, { toLocation: value })} />
+                                    <InputField label={TEXT.to[lang]} lang={lang} mapSearch value={entry.toLocation} onChange={(value) => updateEntry(date, entry.id, { toLocation: value })} />
                                   </>
                                 )}
                                 {entry.roundTrip && (
@@ -1153,7 +1189,7 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
                                   })}
                                   onTimeChange={(value) => updateEntry(date, entry.id, { departureTime: value })}
                                 />
-                                <InputField label={TEXT.from[lang]} value={entry.fromLocation} onChange={(value) => updateEntry(date, entry.id, { fromLocation: value })} />
+                                <InputField label={TEXT.from[lang]} lang={lang} mapSearch value={entry.fromLocation} onChange={(value) => updateEntry(date, entry.id, { fromLocation: value })} />
                                 <DateTimeField
                                   label={TEXT.returnTime[lang]}
                                   date={entry.arrivalDate}
@@ -1166,7 +1202,7 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
                                   onDateChange={(value) => updateEntry(date, entry.id, { arrivalDate: value })}
                                   onTimeChange={(value) => updateEntry(date, entry.id, { arrivalTime: value })}
                                 />
-                                <InputField label={TEXT.to[lang]} value={entry.toLocation} onChange={(value) => updateEntry(date, entry.id, { toLocation: value })} />
+                                <InputField label={TEXT.to[lang]} lang={lang} mapSearch value={entry.toLocation} onChange={(value) => updateEntry(date, entry.id, { toLocation: value })} />
                                 <CostField
                                   label={TEXT.cost[lang]}
                                   value={entry.cost}
@@ -1179,7 +1215,7 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
                             )}
                             {entry.type === "hotel" && !isContinuedHotel(date, entry) && (
                               <>
-                                <InputField label={TEXT.location[lang]} value={entry.location} onChange={(value) => updateEntry(date, entry.id, { location: value })} />
+                                <InputField label={TEXT.location[lang]} lang={lang} mapSearch value={entry.location} onChange={(value) => updateEntry(date, entry.id, { location: value })} />
                                 <div className={styles.stayGrid}>
                                   <div className={styles.stayField}>
                                     <span>{TEXT.stayFrom[lang]}</span>
@@ -1233,7 +1269,7 @@ export default function Trip({ config }: { config: Record<string, unknown> }) {
                               <>
                                 <div className={styles.fieldGrid}>
                                   <InputField label={TEXT.time[lang]} type="time" lang={lang} value={entry.time} onChange={(value) => updateEntry(date, entry.id, { time: value })} />
-                                  <InputField label={TEXT.location[lang]} value={entry.location} onChange={(value) => updateEntry(date, entry.id, { location: value })} />
+                                  <InputField label={TEXT.location[lang]} lang={lang} mapSearch value={entry.location} onChange={(value) => updateEntry(date, entry.id, { location: value })} />
                                 </div>
                                 <CostField
                                   label={TEXT.cost[lang]}
