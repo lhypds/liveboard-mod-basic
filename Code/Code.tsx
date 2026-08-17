@@ -76,7 +76,8 @@ const GENERATE_PROMPT: Record<Language, string> = {
   html: "A self-contained HTML document rendered in a sandboxed iframe. Inline any CSS and JavaScript it needs and don't request anything over the network; console.log reaches the card's console.",
   javascript: "A JavaScript program run in a Web Worker: no DOM, no network. console.log is the only way it shows anything.",
   json: "A JSON document, shown as data rather than run. It has to parse.",
-  python: "A Python program run under Pyodide in a Web Worker: the standard library and what Pyodide bundles, no network. print is the only way it shows anything.",
+  python:
+    "A Python program run under Pyodide in a Web Worker: the standard library and what Pyodide bundles, no network. print is the only way it shows anything.",
 };
 
 /* Matches .editor's padding in code.module.css; scrolling a match into view has to
@@ -276,12 +277,7 @@ function CodeDropdown({
   }
 
   return (
-    <div
-      ref={wrapperRef}
-      className={styles.dropdownWrapper}
-      data-open={open}
-      data-dismissed={dismissed}
-    >
+    <div ref={wrapperRef} className={styles.dropdownWrapper} data-open={open} data-dismissed={dismissed}>
       <button
         type="button"
         className={styles.dropdownTrigger}
@@ -374,26 +370,29 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
     }
   }, []);
 
-  const appendOutput = useCallback((kind: OutputKind, text: string) => {
-    if (!text) return null;
-    if (kind !== "status" && kind !== "input") runHadOutputRef.current = true;
-    const line: OutputLine = {
-      id: ++outputIdRef.current,
-      kind,
-      text: text.length > 20_000 ? `${text.slice(0, 20_000)}\n…` : text,
-    };
-    setOutput((previous) => {
-      const next = [...previous, line].slice(-300);
-      let total = 0;
-      let start = next.length;
-      while (start > 0 && total < 50_000) {
-        start -= 1;
-        total += next[start].text.length;
-      }
-      return next.slice(start);
-    });
-    return line.id;
-  }, [setOutput]);
+  const appendOutput = useCallback(
+    (kind: OutputKind, text: string) => {
+      if (!text) return null;
+      if (kind !== "status" && kind !== "input") runHadOutputRef.current = true;
+      const line: OutputLine = {
+        id: ++outputIdRef.current,
+        kind,
+        text: text.length > 20_000 ? `${text.slice(0, 20_000)}\n…` : text,
+      };
+      setOutput((previous) => {
+        const next = [...previous, line].slice(-300);
+        let total = 0;
+        let start = next.length;
+        while (start > 0 && total < 50_000) {
+          start -= 1;
+          total += next[start].text.length;
+        }
+        return next.slice(start);
+      });
+      return line.id;
+    },
+    [setOutput],
+  );
 
   const stopWorkers = useCallback(() => {
     javascriptWorkerRef.current?.terminate();
@@ -479,7 +478,8 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
         event.source !== iframeRef.current?.contentWindow ||
         !data.type ||
         typeof data.text !== "string"
-      ) return;
+      )
+        return;
       appendOutput(data.type, data.text);
     };
     window.addEventListener("message", handleMessage);
@@ -565,7 +565,8 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
         if (!runHadOutputRef.current) appendOutput("status", STRINGS.completed[locale]);
         return;
       }
-      const kind: OutputKind = data.type === "warn" ? "warn" : data.type === "error" ? "error" : data.type === "result" ? "result" : "log";
+      const kind: OutputKind =
+        data.type === "warn" ? "warn" : data.type === "error" ? "error" : data.type === "result" ? "result" : "log";
       appendOutput(kind, data.text ?? "");
     };
     worker.onerror = (event) => handleWorkerFailure(worker, event.message, false);
@@ -610,7 +611,14 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
         if (!interpreter && !runHadOutputRef.current) appendOutput("status", STRINGS.completed[locale]);
         return;
       }
-      const kind: OutputKind = data.type === "stderr" || data.type === "error" ? "error" : data.type === "result" ? "result" : data.type === "progress" ? "status" : "log";
+      const kind: OutputKind =
+        data.type === "stderr" || data.type === "error"
+          ? "error"
+          : data.type === "result"
+            ? "result"
+            : data.type === "progress"
+              ? "status"
+              : "log";
       appendOutput(kind, data.text ?? "");
     };
     const handleError = (event: ErrorEvent) => fail(event.message);
@@ -900,7 +908,13 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
       if (input.selectionStart === input.selectionEnd) selectLineForCut(input);
       return;
     }
-    if (event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+    if (
+      event.altKey &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.shiftKey &&
+      (event.key === "ArrowUp" || event.key === "ArrowDown")
+    ) {
       event.preventDefault();
       moveLines(event.currentTarget, event.key === "ArrowUp" ? -1 : 1);
       return;
@@ -943,12 +957,15 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
 
     let firstDelta = 0;
     let totalDelta = 0;
-    const lines = text.slice(blockStart, blockEnd).split("\n").map((line, index) => {
-      const delta = event.shiftKey ? -outdentWidth(line, indent) : indent.length;
-      if (index === 0) firstDelta = delta;
-      totalDelta += delta;
-      return delta < 0 ? line.slice(-delta) : delta > 0 ? indent + line : line;
-    });
+    const lines = text
+      .slice(blockStart, blockEnd)
+      .split("\n")
+      .map((line, index) => {
+        const delta = event.shiftKey ? -outdentWidth(line, indent) : indent.length;
+        if (index === 0) firstDelta = delta;
+        totalDelta += delta;
+        return delta < 0 ? line.slice(-delta) : delta > 0 ? indent + line : line;
+      });
     if (totalDelta === 0) return;
 
     const next = text.slice(0, blockStart) + lines.join("\n") + text.slice(blockEnd);
@@ -981,7 +998,13 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
   }
 
   const availableModes: Mode[] =
-    language === "html" ? ["preview"] : language === "json" ? ["view"] : language === "python" ? ["general", "interpreter"] : ["general"];
+    language === "html"
+      ? ["preview"]
+      : language === "json"
+        ? ["view"]
+        : language === "python"
+          ? ["general", "interpreter"]
+          : ["general"];
   const showEditor = mode !== "interpreter" && !(mode === "preview" && previewVisible);
   /* JSON is inert: nothing to execute and nothing to reset back to, so the
      format icon is the only action it offers. */
@@ -1037,7 +1060,7 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
             disabled={running || !showEditor}
             aria-label={STRINGS.format[locale]}
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+            <svg width="10" height="10" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
               <g stroke="currentColor" strokeWidth="1" strokeLinecap="square">
                 <line x1="1" y1="1.5" x2="13" y2="1.5" />
                 <line x1="5" y1="5.5" x2="13" y2="5.5" />
@@ -1058,7 +1081,7 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
             aria-pressed={findOpen}
             title={STRINGS.search[locale]}
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+            <svg width="10" height="10" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
               <g stroke="currentColor" strokeWidth="1" fill="none">
                 <circle cx="5.5" cy="5.5" r="4" />
                 <line x1="8.5" y1="8.5" x2="12.5" y2="12.5" strokeLinecap="square" />
@@ -1108,7 +1131,9 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
         {showEditor && (
           <section className={styles.editorPane}>
             <div className={styles.editorBody}>
-              <pre ref={lineNumbersRef} className={styles.lineNumbers} aria-hidden="true">{lineNumbers}</pre>
+              <pre ref={lineNumbersRef} className={styles.lineNumbers} aria-hidden="true">
+                {lineNumbers}
+              </pre>
               <div className={styles.editorSurface}>
                 <pre ref={highlightRef} className={styles.highlight} aria-hidden="true">
                   <code dangerouslySetInnerHTML={{ __html: highlight(sources[language], language) }} />
@@ -1138,7 +1163,9 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
             }}
           >
             <div className={styles.paneHeader}>
-              <span className={styles.paneHeaderTitle}>{mode === "interpreter" ? `Python ${STRINGS.interpreter[locale]}` : STRINGS.console[locale]}</span>
+              <span className={styles.paneHeaderTitle}>
+                {mode === "interpreter" ? `Python ${STRINGS.interpreter[locale]}` : STRINGS.console[locale]}
+              </span>
               <button
                 type="button"
                 className={styles.consoleClearButton}
@@ -1152,7 +1179,9 @@ export default function Code({ config }: { config: Record<string, unknown> }) {
             <div className={styles.consoleBody} ref={consoleBodyRef}>
               {output.length === 0 && mode !== "interpreter" && <div className={styles.emptyOutput}>{STRINGS.empty[locale]}</div>}
               {output.map((line) => (
-                <pre key={line.id} className={`${styles.outputLine} ${styles[line.kind]}`}>{line.text}</pre>
+                <pre key={line.id} className={`${styles.outputLine} ${styles[line.kind]}`}>
+                  {line.text}
+                </pre>
               ))}
               {mode === "interpreter" && pythonReady && (
                 <label className={styles.promptRow}>

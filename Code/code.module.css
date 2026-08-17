@@ -168,7 +168,7 @@
 .resetButton {
   flex-shrink: 0;
   width: 68px;
-  height: 24px;
+  height: 20px;
   box-sizing: border-box;
   border: 1px solid #000;
   border-radius: 0;
@@ -183,8 +183,8 @@
 .formatButton,
 .searchButton {
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
