@@ -122,6 +122,13 @@
   display: flex;
 }
 
+/* Picking an option leaves the pointer inside the wrapper, so the hover rule above would
+   re-open the list the instant it closed — stay shut until the pointer is back on the
+   trigger. Must follow the rule it overrides: the two have equal specificity. */
+.dropdownWrapper[data-dismissed="true"] .dropdown {
+  display: none;
+}
+
 .dropdownOption {
   min-width: 100%;
   height: 20px;

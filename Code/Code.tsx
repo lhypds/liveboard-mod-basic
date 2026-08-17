@@ -255,6 +255,9 @@ function CodeDropdown({
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // A pick leaves the pointer sitting inside the wrapper, where the hover rule would hold the list
+  // open; this latches it shut until the pointer comes back over the trigger (see the CSS)
+  const [dismissed, setDismissed] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const selected = options.find((option) => option.value === value) ?? options[0];
 
@@ -269,10 +272,16 @@ function CodeDropdown({
   function pick(next: string) {
     onChange(next);
     setOpen(false);
+    setDismissed(true);
   }
 
   return (
-    <div ref={wrapperRef} className={styles.dropdownWrapper} data-open={open}>
+    <div
+      ref={wrapperRef}
+      className={styles.dropdownWrapper}
+      data-open={open}
+      data-dismissed={dismissed}
+    >
       <button
         type="button"
         className={styles.dropdownTrigger}
@@ -280,7 +289,11 @@ function CodeDropdown({
         aria-label={`${ariaLabel}: ${selected.label}`}
         aria-haspopup="listbox"
         aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
+        onPointerEnter={() => setDismissed(false)}
+        onClick={() => {
+          setDismissed(false);
+          setOpen((current) => !current);
+        }}
       >
         {selected.label}
       </button>
