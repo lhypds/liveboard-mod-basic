@@ -36,7 +36,7 @@ export const config = {
   x: 0,
   y: 0,
   w: 36,
-  h: 32,
+  h: 28,
   minW: 18,
   minH: 16,
   comp: {
