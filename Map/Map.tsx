@@ -59,6 +59,8 @@ type Strings = {
   error: string;
   noToken: string;
   dropHint: string;
+  measure: string;
+  measureHint: string;
 };
 
 const STRINGS: Record<string, Strings> = {
@@ -70,6 +72,8 @@ const STRINGS: Record<string, Strings> = {
     error: "Search failed. Please try again.",
     noToken: "Add VITE_MAPBOX_TOKEN to display the map.",
     dropHint: "Drop text to search this address",
+    measure: "Measure distance",
+    measureHint: "Click the start point",
   },
   ja: {
     placeholder: "住所を検索...",
@@ -79,6 +83,8 @@ const STRINGS: Record<string, Strings> = {
     error: "検索に失敗しました。もう一度お試しください。",
     noToken: "地図を表示するには VITE_MAPBOX_TOKEN を設定してください。",
     dropHint: "テキストをドロップして住所を検索",
+    measure: "距離を測定",
+    measureHint: "始点をクリック",
   },
   zh: {
     placeholder: "搜索地址...",
@@ -88,6 +94,8 @@ const STRINGS: Record<string, Strings> = {
     error: "搜索失败，请重试。",
     noToken: "请设置 VITE_MAPBOX_TOKEN 以显示地图。",
     dropHint: "拖入文字即可搜索该地址",
+    measure: "测量距离",
+    measureHint: "点击起点",
   },
 };
 
@@ -193,6 +201,61 @@ function isStandard(url: string): boolean {
   return url.includes("mapbox/standard");
 }
 
+const MEASURE_SOURCE = "liveboard-measure";
+const MEASURE_LINE_LAYER = "liveboard-measure-line";
+const MEASURE_POINT_LAYER = "liveboard-measure-point";
+
+// `end` is wherever the pointer is until the second click lands, which is what makes the distance
+// move with the mouse; `fixed` is that second click, after which the line stops following anything
+type Measure = {
+  start: [number, number] | null;
+  end: [number, number] | null;
+  fixed: boolean;
+};
+
+const NO_MEASURE: Measure = { start: null, end: null, fixed: false };
+
+// Typed here rather than pulled from @types/geojson: this module declares its own dependencies, and
+// the shape a two-point ruler needs is small enough to state outright
+type MeasureFeature = {
+  type: "Feature";
+  properties: null;
+  geometry:
+    | { type: "Point"; coordinates: [number, number] }
+    | { type: "LineString"; coordinates: Array<[number, number]> };
+};
+
+function measureData(measure: Measure): { type: "FeatureCollection"; features: MeasureFeature[] } {
+  const features: MeasureFeature[] = [];
+  const { start, end } = measure;
+  if (start) features.push({ type: "Feature", properties: null, geometry: { type: "Point", coordinates: start } });
+  if (start && end) {
+    features.push({ type: "Feature", properties: null, geometry: { type: "LineString", coordinates: [start, end] } });
+    if (measure.fixed) {
+      features.push({ type: "Feature", properties: null, geometry: { type: "Point", coordinates: end } });
+    }
+  }
+  return { type: "FeatureCollection", features };
+}
+
+const EARTH_RADIUS_M = 6_371_008.8;
+
+function distanceMeters(a: [number, number], b: [number, number]): number {
+  const rad = (deg: number) => (deg * Math.PI) / 180;
+  const lat1 = rad(a[1]);
+  const lat2 = rad(b[1]);
+  const dLat = lat2 - lat1;
+  const dLng = rad(b[0] - a[0]);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+// Three significant figures at every scale: a 4 m gap reads as 4.2 m, a city crossing as 12.3 km
+function formatDistance(meters: number): string {
+  if (meters < 1_000) return `${meters < 10 ? meters.toFixed(1) : Math.round(meters)} m`;
+  return `${(meters / 1_000).toFixed(meters < 10_000 ? 2 : 1)} km`;
+}
+
 // The label the map already draws, plus what kind of place it is — built as nodes because the
 // name comes from map data, not from us
 function poiContent(name: string, properties: Record<string, string | number | boolean>) {
@@ -251,6 +314,13 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [dropping, setDropping] = useState(false);
   const canDropSearch = Boolean(TOKEN && GOOGLE_API_KEY);
+  const [measuring, setMeasuring] = useState(false);
+  // The map's own listeners are bound once and outlive any render, so what they read has to be a
+  // ref: the POI handlers below check it to stay out of the ruler's way
+  const measuringRef = useRef(false);
+  const measureRef = useRef<Measure>(NO_MEASURE);
+  const measureLabelRef = useRef<mapboxgl.Marker | null>(null);
+  const measureDeferredRef = useRef(false);
 
   useEffect(() => {
     if (!containerRef.current || !TOKEN) return;
@@ -290,6 +360,9 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
       }
       map.setLanguage(languageRef.current);
       syncPoi(standard);
+      // A style swap takes the ruler's source and layers with it; a line in progress is redrawn
+      // onto the style that just arrived
+      drawMeasure();
     };
 
     const syncPoi = (standard: boolean) => {
@@ -312,6 +385,8 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
         type: "click",
         target: poi,
         handler: (event) => {
+          // A click while the ruler is out is a measurement point, not a request for a shop card
+          if (measuringRef.current) return;
           const feature = event.feature;
           const name = feature?.properties?.name;
           if (!feature || typeof name !== "string" || !name) return;
@@ -326,10 +401,13 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
             .addTo(map);
         },
       });
+      // Both cursor handlers stand down while measuring, or crossing a shop would trade the
+      // crosshair for a pointer and never give it back
       map.addInteraction("poi-enter", {
         type: "mouseenter",
         target: poi,
         handler: () => {
+          if (measuringRef.current) return;
           map.getCanvas().style.cursor = "pointer";
         },
       });
@@ -337,6 +415,7 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
         type: "mouseleave",
         target: poi,
         handler: () => {
+          if (measuringRef.current) return;
           map.getCanvas().style.cursor = "";
         },
       });
@@ -369,11 +448,66 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
       popupRef.current?.remove();
       popupRef.current = null;
       poiBoundRef.current = false;
+      measureLabelRef.current?.remove();
+      measureLabelRef.current = null;
+      measureRef.current = NO_MEASURE;
       map.remove();
       mapRef.current = null;
       searchMarkerRef.current = null;
     };
+    // The map is built once and torn down with the card; drawMeasure reads only refs, so the
+    // instance captured here stays correct for the life of that map
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Bound only while the ruler is out, so a board that is being read still gets plain map clicks
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !measuring) return;
+    const canvas = map.getCanvas();
+    canvas.style.cursor = "crosshair";
+    // Two measurement points in quick succession are otherwise read as a double click
+    map.doubleClickZoom.disable();
+
+    const handleClick = (event: mapboxgl.MapMouseEvent) => {
+      const at: [number, number] = [event.lngLat.lng, event.lngLat.lat];
+      const measure = measureRef.current;
+      // A finished line has answered its question; the next click asks a new one
+      measureRef.current = measure.start && !measure.fixed
+        ? { start: measure.start, end: at, fixed: true }
+        : { start: at, end: null, fixed: false };
+      syncMeasure();
+    };
+
+    const handleMove = (event: mapboxgl.MapMouseEvent) => {
+      const measure = measureRef.current;
+      if (!measure.start || measure.fixed) return;
+      measureRef.current = { ...measure, end: [event.lngLat.lng, event.lngLat.lat] };
+      syncMeasure();
+    };
+
+    // Nothing is being pointed at once the pointer is off the card, so the rubber band lets go
+    const handleOut = () => {
+      const measure = measureRef.current;
+      if (!measure.start || measure.fixed || !measure.end) return;
+      measureRef.current = { ...measure, end: null };
+      syncMeasure();
+    };
+
+    map.on("click", handleClick);
+    map.on("mousemove", handleMove);
+    map.on("mouseout", handleOut);
+    return () => {
+      map.off("click", handleClick);
+      map.off("mousemove", handleMove);
+      map.off("mouseout", handleOut);
+      map.doubleClickZoom.enable();
+      canvas.style.cursor = "";
+    };
+    // syncMeasure reads nothing but refs and the map itself, so listing it would only rebind these
+    // listeners on every render — the ruler goes on and off, and that is the whole dependency
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [measuring]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -433,6 +567,93 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
     delete next.addressLng;
     delete next.addressLat;
     saveRef.current?.(next);
+  }
+
+  // The line lives in the map style, so it is added on first use and re-added after a style swap;
+  // when nothing is being measured this just empties the source
+  function drawMeasure() {
+    const map = mapRef.current;
+    if (!map) return;
+    const source = map.getSource<mapboxgl.GeoJSONSource>(MEASURE_SOURCE);
+    if (source) {
+      // Deliberately not gated on isStyleLoaded: Standard reports the style unloaded while its
+      // imports settle, which is exactly when a click that ends a measurement tends to land
+      source.setData(measureData(measureRef.current));
+      return;
+    }
+    if (!measureRef.current.start) return;
+    // Adding to the style is the part that does need a loaded style. One deferral is enough — the
+    // pointer keeps moving while the style settles, and each move would otherwise queue its own
+    if (!map.isStyleLoaded()) {
+      if (measureDeferredRef.current) return;
+      measureDeferredRef.current = true;
+      map.once("idle", () => {
+        measureDeferredRef.current = false;
+        drawMeasure();
+      });
+      return;
+    }
+    map.addSource(MEASURE_SOURCE, { type: "geojson", data: measureData(NO_MEASURE) });
+    // Standard drops slot-less layers on top of everything, which is where a ruler belongs;
+    // classic styles have no slots, so the layer simply goes on last
+    const slot = isStandard(styleUrlRef.current) ? "top" : undefined;
+    map.addLayer({
+      id: MEASURE_LINE_LAYER,
+      type: "line",
+      source: MEASURE_SOURCE,
+      slot,
+      filter: ["==", ["geometry-type"], "LineString"],
+      layout: { "line-cap": "round" },
+      paint: { "line-color": "#000", "line-width": 2, "line-dasharray": [2, 1.5] },
+    });
+    map.addLayer({
+      id: MEASURE_POINT_LAYER,
+      type: "circle",
+      source: MEASURE_SOURCE,
+      slot,
+      filter: ["==", ["geometry-type"], "Point"],
+      paint: { "circle-radius": 4, "circle-color": "#fff", "circle-stroke-color": "#000", "circle-stroke-width": 2 },
+    });
+    map.getSource<mapboxgl.GeoJSONSource>(MEASURE_SOURCE)?.setData(measureData(measureRef.current));
+  }
+
+  // A marker rather than an overlay: the reading has to stay on its end of the line while the map
+  // is panned and zoomed under it
+  function syncMeasureLabel() {
+    const map = mapRef.current;
+    const { start, end } = measureRef.current;
+    if (!map || !start || !end) {
+      measureLabelRef.current?.remove();
+      measureLabelRef.current = null;
+      return;
+    }
+    if (!measureLabelRef.current) {
+      const element = document.createElement("div");
+      element.className = styles.measureLabel;
+      measureLabelRef.current = new mapboxgl.Marker({ element, anchor: "bottom", offset: [0, -12] })
+        .setLngLat(end)
+        .addTo(map);
+    }
+    measureLabelRef.current.setLngLat(end);
+    measureLabelRef.current.getElement().textContent = formatDistance(distanceMeters(start, end));
+  }
+
+  function syncMeasure() {
+    drawMeasure();
+    syncMeasureLabel();
+  }
+
+  // Putting the ruler away is what clears the line — the second click fixes it, it does not end it
+  function toggleMeasure() {
+    const next = !measuring;
+    measuringRef.current = next;
+    setMeasuring(next);
+    measureRef.current = NO_MEASURE;
+    syncMeasure();
+    if (next) {
+      popupRef.current?.remove();
+      popupRef.current = null;
+    }
   }
 
   async function runSearch(query: string) {
@@ -539,6 +760,21 @@ export default function Map({ config }: { config: Record<string, unknown> }) {
               {searchError && <div className={styles.searchError}>{searchError}</div>}
             </form>
           )}
+          <button
+            type="button"
+            className={measuring ? `${styles.rulerButton} ${styles.rulerButtonOn}` : styles.rulerButton}
+            onClick={toggleMeasure}
+            aria-label={strings.measure}
+            aria-pressed={measuring}
+            title={measuring ? strings.measureHint : strings.measure}
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+              <g fill="none" stroke="currentColor" strokeWidth="1">
+                <rect x="1" y="5" width="14" height="6" />
+                <path d="M4 5v2.5M7 5v3.5M10 5v2.5M13 5v3.5" />
+              </g>
+            </svg>
+          </button>
         </div>
       )}
     </div>
