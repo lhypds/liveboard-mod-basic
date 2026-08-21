@@ -451,11 +451,12 @@ export default function Paint({ config }: { config: Record<string, unknown> }) {
             data-active={erasing ? "" : undefined}
             onClick={() => saveTool({ erasing: true })}
           >
-            {/* A ring on the paper: the eraser's tip really is round — a stroke with round caps —
-                and against the pen's diagonal it is the one shape that cannot be mistaken for it */}
+            {/* A block eraser laid on the paper, rubber end down: the band across it is what keeps
+                the short chunky block from reading as the pen's long thin barrel */}
             <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="10" r="6" />
-              <path d="M21 20H3" />
+              <path d="M5 15l4 4 10-10-4-4z" />
+              <path d="M10 10l4 4" />
+              <path d="M5 20h15" />
             </svg>
           </button>
         </div>
