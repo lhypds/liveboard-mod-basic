@@ -59,6 +59,15 @@ The drop is compressed to WebP in the browser (`comp.quality`, scaled down to `c
 The card keeps only the URL, never the bytes: a board is saved as JSON, so an inline picture would ride along in every save, export and sync.
 
 
+`Paint`
+
+Draw on the card with a pen: eight colours, four widths, an eraser, and Undo/Redo/Clear in the card's own toolbar.
+Clear is one Undo away from coming back, so the card registers no Reset of its own — the toolbar is the whole tool.
+In eraser mode a ring follows the pointer at the width the eraser actually cuts at, since that is the one tool whose reach its own marks cannot show.
+A stroke is kept in `comp.strokes` as fractions of the card's width rather than pixels, so resizing the card scales the drawing instead of cropping it, and the card is still saved and synced as plain JSON — one save per stroke, never per point.
+The eraser cuts through the strokes under it (`destination-out`) at `comp.eraserScale` times the pen's width, so it also reads as an eraser in a card exported to PNG.
+
+
 Setup
 -----
 

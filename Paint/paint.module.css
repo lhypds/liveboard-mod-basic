@@ -1,0 +1,137 @@
+.container {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* No rule under it: the paper's own frame below is edge enough, and a second hairline 6px above it
+   read as a box drawn around nothing */
+.toolbar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Undo and Redo sit at the far end, away from the pen the pointer keeps coming back to */
+.spacer {
+  flex: 1 1 auto;
+}
+
+/* Square, and the buttons' own height — the whole row sits on one baseline */
+.swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid #000;
+  cursor: pointer;
+}
+
+/* The picked colour is marked from the inside: a ring drawn around a swatch would read as another
+   colour next to it */
+.swatch[data-active] {
+  box-shadow: inset 0 0 0 2px #fff;
+}
+
+/* Kept small on purpose: eight colours, four widths, two modes and three actions share one row on a
+   default-sized card, and this is what keeps them from wrapping onto a second */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid #000;
+  background: #fff;
+  color: #0f172a;
+  font-family: var(--font-title);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.button:hover,
+.button[data-active] {
+  background: #000;
+  color: #fff;
+}
+
+.button:disabled {
+  border-color: #d4d4d4;
+  background: #fff;
+  color: #d4d4d4;
+  cursor: default;
+}
+
+.dot {
+  display: block;
+  border-radius: 50%;
+  /* Inverts with the button, so the picked width stays legible once it is black */
+  background: currentColor;
+}
+
+.icon {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The paper. Bordered so the drawing area's edges are where the ink stops, which is not the card's
+   own border — the toolbar is outside it. */
+.surface {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border: 1px solid #000;
+  background: #fff;
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* Without this a touch drag scrolls the page instead of drawing a line */
+  touch-action: none;
+  cursor: crosshair;
+}
+
+/* The eraser's footprint, following the pointer at the size its strokes are drawn at. Laid over the
+   canvas rather than made a real cursor: a cursor image is capped at 128px and rounded to whatever
+   the platform feels like, and this has to be the true diameter to be worth showing. */
+.ghost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: none;
+  box-sizing: border-box;
+  border: 1px solid #000;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* Inverted against whatever it is over, so the ring reads on ink as clearly as on blank paper. The
+   black ring above is what browsers without the blend mode keep. */
+@supports (mix-blend-mode: difference) {
+  .ghost {
+    border-color: #fff;
+    mix-blend-mode: difference;
+  }
+}

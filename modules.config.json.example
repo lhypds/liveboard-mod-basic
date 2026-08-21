@@ -34,5 +34,9 @@
   "Trip": {
     "enabled": true,
     "allowMultipleInstances": true
+  },
+  "Paint": {
+    "enabled": true,
+    "allowMultipleInstances": true
   }
 }
