@@ -67,6 +67,19 @@ In eraser mode a ring follows the pointer at the width the eraser actually cuts 
 A stroke is kept in `comp.strokes` as fractions of the card's width rather than pixels, so resizing the card scales the drawing instead of cropping it, and the card is still saved and synced as plain JSON — one save per stroke, never per point.
 The eraser cuts through the strokes under it (`destination-out`) at `comp.eraserScale` times the pen's width, so it also reads as an eraser in a card exported to PNG.
 
+`X`
+
+A card whose contents are written for it: describe a widget to the board's Generate button and what comes back — one self-contained HTML document — is what the card shows.
+The document renders in an iframe with `sandbox="allow-scripts"` and nothing else, so it has no origin of its own: it cannot reach the board's DOM, its storage, or the network. `allow-same-origin` must never be added alongside `allow-scripts` — together they let a document remove its own sandbox, and the sandbox is the entire guard here.
+A bridge script is injected into every render for the two things a null origin breaks: `localStorage` and `sessionStorage` throw on access, so they are replaced with per-render stand-ins, and nothing inside can reach the card, so uncaught errors are posted out to it.
+Base styles go in ahead of the document's own, so an element the widget doesn't style still arrives in the board's font rather than the browser's — and scrollbars are hidden inside the card the way they are everywhere else on the board, with the wheel still scrolling what it is over.
+An error surfaces on a bar under the widget and is sent back to be repaired without being asked — twice at most, after which the bar keeps a Repair button and waits. Any edit or Generate that isn't itself a repair starts that budget over.
+A finished rewrite renders immediately: the board tells the card when a run has stopped and hands it the final text (`GenerateTarget.onDone`), which `onGenerated` alone cannot say — it fires many times a second and never marks the last chunk.
+Until then the card says so itself — over the whole card while it is still empty, in a corner once a widget is already running, since a rewrite can take the better part of a minute and the board's own overlay only covers the wait for the first words. Text arriving any other way (a hand edit, an undo) waits for the source to sit still for 700ms, so it is rendered once rather than on every keystroke.
+The footer's `</>` swaps the whole card between the widget and its source — not a split: at the size these cards are, half of one is too little to read code in and too little to run it in either.
+The card's Refresh runs the same document again in a new frame — a clock starts over, a random layout comes out different.
+Named for the glyph: the title is `𝛘` in every language, while the folder stays ASCII `X` because that name is also the card's address (`/api/data/X`), which the server validates against `[\w-]+`.
+
 
 Setup
 -----

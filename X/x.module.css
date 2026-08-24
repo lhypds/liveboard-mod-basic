@@ -1,0 +1,170 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+/* The widget gets everything the footer and the panels don't. `min-height: 0` is
+   what lets it actually shrink inside the flex column instead of pushing the
+   footer off the bottom of the card. */
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.frame {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: #fff;
+  /* A widget is laid out for the box it is given; letting it be dragged around
+     inside that box would only ever show its own margins */
+  display: block;
+}
+
+/* Black, like everything else this board says. It was grey to sit quietly in an
+   empty card, but this line is the only instruction a new card carries — the one
+   that says where the button is — so it is the last thing that should be faded. */
+.placeholder {
+  margin: auto;
+  padding: 0 16px;
+  max-width: 22em;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #000;
+}
+
+/* Said in the board's own words for a card being rewritten: grey, 12px, on a veil
+   rather than a panel. Never takes a click — whatever is underneath keeps running
+   and stays usable while the next version is being written. */
+.working {
+  position: absolute;
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  color: #6b7280;
+  pointer-events: none;
+}
+
+.workingAlone {
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  text-align: center;
+}
+
+.workingBadge {
+  right: 0;
+  bottom: 0;
+  padding: 2px 6px;
+}
+
+.errorBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+/* One line, whatever the stack trace is. The whole thing is on the title attribute
+   for anyone who wants it, and all of it goes to the model either way. */
+.errorText {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.errorAction {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid #b91c1c;
+  background: transparent;
+  font-size: 12px;
+  color: #b91c1c;
+  cursor: pointer;
+}
+
+.errorAction:hover {
+  background: #b91c1c;
+  color: #fff;
+}
+
+/* The source takes the whole stage when it is showing — same box the widget runs
+   in, so toggling swaps the two without the card moving underneath. */
+.code {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 6px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: #fff;
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  /* Wraps rather than scrolling sideways: a generated document has long lines, and
+     a horizontal scrollbar in a card this size hides most of them. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.code::-webkit-scrollbar {
+  display: none;
+}
+
+.footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Black at rest and black when it is on. It was greyed out to keep it quiet under
+   the widget, but grey on a control this small reads as disabled rather than as
+   secondary — and this board draws everything else in black. Which side it is on is
+   said by what fills the card, not by the shade of the button. */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #000;
+  cursor: pointer;
+}
+
+.toggle svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

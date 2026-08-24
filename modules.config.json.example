@@ -38,5 +38,9 @@
   "Paint": {
     "enabled": true,
     "allowMultipleInstances": true
+  },
+  "X": {
+    "enabled": true,
+    "allowMultipleInstances": true
   }
 }
