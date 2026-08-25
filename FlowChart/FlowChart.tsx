@@ -120,6 +120,17 @@ type Comp = {
   updatedAt?: number;
 };
 
+type GenerateTarget = {
+  content: () => string;
+  prompt: string;
+  onGenerated: (next: string) => void;
+  onDone?: (text: string) => void;
+  onBusy?: (busy: boolean) => void;
+};
+
+const GENERATE_PROMPT =
+  "Generate Mermaid flowchart code for this Flow Chart card. Return only a complete Mermaid flowchart or graph definition, no markdown fences or explanation. Use readable node labels and directed arrows. Preserve any useful existing Mermaid structure unless the instruction asks to replace it.";
+
 /**
  * What the toolbar's Delete and the Delete key act on. Boxes come as a list because a marquee
  * picks up however many it is dragged over; an arrow is only ever picked one at a time, since
@@ -540,9 +551,16 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
   const surfaceRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
+  const liveRef = useRef({ chart, comp, save, busy: false });
   // Whether this editing session has already put a step on the Undo stack. Typing is one step,
   // not one per keystroke — otherwise a word costs as many Undos as it has letters.
   const textStepRef = useRef(false);
+
+  useEffect(() => {
+    liveRef.current.chart = chart;
+    liveRef.current.comp = comp;
+    liveRef.current.save = save;
+  }, [chart, comp, save]);
 
   function persist(next: Chart) {
     save?.({
@@ -759,6 +777,45 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
     reader.readAsText(file);
     e.target.value = "";
   }
+
+  function importGeneratedMermaid(text: string) {
+    const next = chartFromMermaid(text);
+    if (!next.boxes.length) return;
+    setPast((prev) => [...prev, liveRef.current.chart].slice(-MAX_HISTORY));
+    setFuture([]);
+    liveRef.current.save?.({
+      ...liveRef.current.comp,
+      boxes: next.boxes,
+      arrows: next.arrows,
+      createdAt: liveRef.current.comp?.createdAt ?? Date.now(),
+      updatedAt: Date.now(),
+    });
+    setSelected(null);
+    setEditing(null);
+    setArrowMode(false);
+    setLink(null);
+  }
+
+  /* The header's Generate button works in Mermaid because that is the compact,
+     editable interchange format this card already imports. While tokens stream,
+     FlowChart waits; the final answer is then imported as boxes and arrows. */
+  useEffect(() => {
+    const setGenerate = config._setGenerate as ((target: GenerateTarget | null) => void) | undefined;
+    setGenerate?.({
+      content: () => chartToMermaid(liveRef.current.chart),
+      prompt: GENERATE_PROMPT,
+      onBusy: (busy) => {
+        liveRef.current.busy = busy;
+      },
+      onGenerated: (next) => {
+        if (!liveRef.current.busy) importGeneratedMermaid(next);
+      },
+      onDone: importGeneratedMermaid,
+    });
+    return () => setGenerate?.(null);
+    // Registered once: the target reads current chart state through liveRef.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleSurfacePointerDown(e: React.PointerEvent<HTMLDivElement>) {
     setSelected(null);
