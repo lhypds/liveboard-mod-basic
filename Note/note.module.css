@@ -25,18 +25,23 @@
   line-height: 1.5;
 }
 
-/* A faint solid grid behind the note text, matching the Code editor's grid
-   but sized two characters wide per cell (roughly one CJK character) instead
-   of one, since notes are typically written in CJK text. */
+/* A faint solid grid behind the note text, matching the Code editor's grid but
+   sized two characters wide per cell instead of one.
+
+   Two characters, exactly: `ch` is Fira Code's own advance, so the Latin text
+   lands on every gridline no matter the font size. CJK cannot also be exact
+   here. Fira Code carries no CJK glyphs, so those characters fall through to a
+   system font advancing 1em each, while two Fira Code characters advance
+   1.2308em (1200 units on a 1950-unit em, at every weight) — a ratio no cell
+   width reconciles. Splitting the difference used to leave both scripts off the
+   grid; the cell now belongs to the Latin, and CJK runs 19% narrow. Putting CJK
+   back on the grid too means giving the note its own Latin face scaled to a
+   0.5em advance, which retunes the note's font size and line height with it. */
 .textareaGrid {
   background-image:
     linear-gradient(to right, rgba(0, 0, 0, 0.035) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(0, 0, 0, 0.035) 1px, transparent 1px);
-  /* Fira Code has no CJK glyphs, so the browser substitutes a system font for
-     CJK characters; that substitute renders ~1em wide, not 2ch like a true
-     CJK-aware monospace font would. Split the difference so neither script
-     drifts far from the cell. */
-  background-size: calc((1em + 2ch) / 2) 1.5em;
+  background-size: 2ch 1.5em;
   background-repeat: repeat;
   /* Align the grid's first cell to where the text actually starts (after
      padding) instead of the padding box's outer edge, and keep it pinned to
