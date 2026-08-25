@@ -11,6 +11,7 @@ import * as Map from "./Map";
 import * as Image from "./Image";
 import * as Trip from "./Trip";
 import * as Paint from "./Paint";
+import * as FlowChart from "./FlowChart";
 import * as X from "./X";
 
 export type ModuleEntry = {
@@ -49,6 +50,7 @@ const avaliableModules: Record<string, ModuleEntry> = {
   Image: { component: Image.default, config: Image.config },
   Trip: { component: Trip.default, config: Trip.config },
   Paint: { component: Paint.default, config: Paint.config },
+  FlowChart: { component: FlowChart.default, config: FlowChart.config },
   X: { component: X.default, config: X.config },
 };
 

@@ -1,0 +1,224 @@
+.container {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Same row as Paint's, down to the button size: the two cards sit on one wall and a toolbar
+   that is nearly the same reads worse than one that is exactly the same */
+.toolbar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Undo, Redo and Delete sit at the far end, away from the two tools the pointer keeps coming back to */
+.spacer {
+  flex: 1 1 auto;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid #000;
+  background: #fff;
+  color: #0f172a;
+  font-family: var(--font-title);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.button:hover,
+.button[data-active] {
+  background: #000;
+  color: #fff;
+}
+
+.button:disabled {
+  border-color: #d4d4d4;
+  background: #fff;
+  color: #d4d4d4;
+  cursor: default;
+}
+
+.icon {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The sheet the chart is drawn on. Bordered, so the edges of the drawing area are visible where
+   the card's own border is not — the toolbar sits outside it. */
+.surface {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #000;
+  background: #fff;
+  /* The chart takes Tab, Enter and Delete, so it has to be focusable — without a ring around
+     the card once it is */
+  outline: none;
+  /* Hidden, like the page's own bar and every other module that scrolls. A chart bigger than
+     its card still pans to a wheel or a swipe. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.surface::-webkit-scrollbar {
+  display: none;
+}
+
+/* As big as the card, or as big as the chart, whichever is more — sized from the render */
+.canvas {
+  position: relative;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+/* Under the boxes, and deaf to the pointer except on the hit lines below: the empty space
+   between arrows belongs to the sheet, so a press there still clears the selection */
+.arrows {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.hit {
+  stroke: transparent;
+  stroke-width: 12px;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+/* The arrow being drawn: dashed, which is what says it is not there yet — the finished ones are
+   solid, and neither of them needs a colour to tell them apart */
+.live {
+  stroke: #0f172a;
+  stroke-width: 1px;
+  stroke-dasharray: 4 4;
+  pointer-events: none;
+}
+
+.box {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 6px;
+  border: 1px solid #000;
+  background: #fff;
+  color: #0f172a;
+  font-family: var(--font-title);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  /* Deliberately not `overflow: hidden`: the four link handles straddle the border, and clipping
+     here cuts each of them in half — and takes the outer half's share of the press with it, so a
+     pull that starts a hair outside the box drags the box instead. What the label does when it
+     outgrows the box is `.text`'s business, below. */
+  cursor: move;
+  user-select: none;
+  /* Without this a touch drag pans the sheet instead of moving the box */
+  touch-action: none;
+}
+
+/* Picked things on this card are drawn twice as heavy — a box's border here, an arrow's stroke in
+   the render. Weight rather than a colour: the whole board is black on white, and one card putting
+   a blue on it would be the only colour on the wall. The box-sizing above keeps the second px on
+   the inside, so a box does not move or resize as it is picked. */
+.box[data-selected] {
+  border-width: 2px;
+}
+
+/* In arrow mode the whole box is a target, and nothing in it is draggable */
+.surface[data-linking] .box {
+  cursor: crosshair;
+}
+
+.text {
+  display: block;
+  width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Sized to the text it holds, not to the box — the height comes from the render, which measures
+   the content. A textarea stretched to the full box would start its first line at the top, where
+   the label it stands in for sits in the middle; `max-height` is what keeps a label longer than
+   the box inside it. */
+.textarea {
+  box-sizing: border-box;
+  max-height: 100%;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  resize: none;
+  cursor: text;
+  user-select: text;
+  scrollbar-width: none;
+}
+
+.textarea::-webkit-scrollbar {
+  display: none;
+}
+
+/* The four places an arrow can be pulled from. Out of sight until the box is under the pointer
+   or picked — four dots on every box would be most of what a small chart is made of. Hidden with
+   `visibility` rather than a zero opacity, which would leave four invisible targets straddling
+   the border of every box, each of them taking a press meant for the box itself. A finger has no
+   hover to show them with; it gets the arrow-mode button in the toolbar, and the handles of a box
+   it has already picked. */
+.port {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  box-sizing: border-box;
+  border: 1px solid #000;
+  border-radius: 50%;
+  background: #fff;
+  visibility: hidden;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.box:hover .port,
+.box[data-selected] .port {
+  visibility: visible;
+}
+
+/* Arrow mode draws its own arrows; a handle there would only be a second way to start the same one */
+.surface[data-linking] .port {
+  display: none;
+}

@@ -39,6 +39,10 @@
     "enabled": true,
     "allowMultipleInstances": true
   },
+  "FlowChart": {
+    "enabled": true,
+    "allowMultipleInstances": true
+  },
   "X": {
     "enabled": true,
     "allowMultipleInstances": true

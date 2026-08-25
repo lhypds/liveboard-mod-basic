@@ -67,6 +67,15 @@ In eraser mode a ring follows the pointer at the width the eraser actually cuts 
 A stroke is kept in `comp.strokes` as fractions of the card's width rather than pixels, so resizing the card scales the drawing instead of cropping it, and the card is still saved and synced as plain JSON — one save per stroke, never per point.
 The eraser cuts through the strokes under it (`destination-out`) at `comp.eraserScale` times the pen's width, so it also reads as an eraser in a card exported to PNG.
 
+`FlowChart`
+
+Boxes and arrows, drawn on the card: add a box from the toolbar, drag it to move, double-click to type in it, and pull an arrow out of any of its four edge handles onto another box.
+Tab is the fast way through: it adds the next box to the right of the one being worked on and draws the arrow from it, so a chain is typed rather than drawn — and Tab out of a box does the same, without a hand leaving the keyboard.
+The toolbar's arrow button is the same link for a finger, which never hovers and so never sees the handles: press it, then the two boxes in turn.
+An arrow keeps only the ids of the boxes at its two ends (`comp.arrows`), never a line — both ends are worked out from where the boxes are every time the chart is drawn, which is what makes a dragged box carry its arrows along and a deleted one take them with it.
+Boxes are kept in px (`comp.boxes`) rather than as fractions of the card's width the way Paint keeps its strokes: a box holds text, and text does not scale with the card. A chart that outgrows its card scrolls instead.
+Undo, Redo and Clear are in the card's own toolbar, as in Paint, so Clear is one Undo away from coming back; typing into a box is one Undo step, not one per keystroke.
+
 `X`
 
 A card whose contents are written for it: describe a widget to the board's Generate button and what comes back — one self-contained HTML document — is what the card shows.

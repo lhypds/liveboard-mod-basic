@@ -8,13 +8,16 @@
 
 /* The whole card is the terminal: the scrollback, the prompt and the line being typed are
    one text box, so the caret sits after the prompt the way it does in a real one. Its
-   border is the same hairline weight as the card's own. */
+   border is the same hairline weight as the card's own, softened at the corners — the one
+   place on the board where a box sits inside another box of the same weight, and a square
+   corner drawn a few px inside a square corner reads as a printing error. */
 .terminal {
   flex: 1;
   min-width: 0;
   box-sizing: border-box;
   resize: none;
   border: 1px solid black;
+  border-radius: 4px;
   outline: none;
   padding: 6px;
   background-color: transparent;
@@ -45,8 +48,10 @@
    into the session. */
 .notice {
   position: absolute;
-  /* Inside the box's border, so the border stays as crisp as the card's own */
+  /* Inside the box's border, so the border stays as crisp as the card's own — and rounded
+     with it, or its white square would fill in the corners the border just gave up */
   inset: 2px;
+  border-radius: 2px;
   display: flex;
   align-items: center;
   justify-content: center;
