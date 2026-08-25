@@ -52,6 +52,13 @@ const STRINGS: Record<Lang, Strings> = {
 const BOX_W = 120;
 const BOX_H = 48;
 
+/** Imported labels can be longer than a hand-drawn starter box. Keep them readable, not enormous. */
+const IMPORT_MAX_W = 260;
+const TEXT_PX = 12;
+const TEXT_LINE = 17;
+const TEXT_PAD_X = 14;
+const TEXT_PAD_Y = 10;
+
 /** The space Tab leaves between a box and the one it adds beside it. */
 const GAP = 40;
 
@@ -224,6 +231,10 @@ function snap(value: number): number {
   return Math.round(value / GRID) * GRID;
 }
 
+function snapUp(value: number): number {
+  return Math.ceil(value / GRID) * GRID;
+}
+
 function center(box: Box): Point {
   return { x: box.x + box.w / 2, y: box.y + box.h / 2 };
 }
@@ -315,6 +326,31 @@ function cleanMermaidLabel(label: string): string {
     .replace(/\\"/g, '"');
 }
 
+function textWidth(text: string): number {
+  let width = 0;
+  for (const char of text) {
+    if (char === " ") width += TEXT_PX * 0.35;
+    else if (/[A-Z0-9]/.test(char)) width += TEXT_PX * 0.68;
+    else if (/[il.,:;|!']/i.test(char)) width += TEXT_PX * 0.35;
+    else if (/[^\x00-\x7F]/.test(char)) width += TEXT_PX;
+    else width += TEXT_PX * 0.58;
+  }
+  return width;
+}
+
+function importedBoxSize(text: string): { w: number; h: number } {
+  const lines = (text || " ").split(/\r?\n/);
+  const longest = Math.max(...lines.map(textWidth));
+  const naturalW = Math.ceil(longest + TEXT_PAD_X);
+  const w = snapUp(Math.max(MIN_W, Math.min(IMPORT_MAX_W, naturalW)));
+  const innerW = Math.max(1, w - TEXT_PAD_X);
+  const lineCount = lines.reduce((count, line) => count + Math.max(1, Math.ceil(textWidth(line || " ") / innerW)), 0);
+  return {
+    w,
+    h: snapUp(Math.max(MIN_H, Math.ceil(lineCount * TEXT_LINE + TEXT_PAD_Y))),
+  };
+}
+
 function readMermaidNode(raw: string): { id: string; text?: string } | null {
   const token = raw
     .trim()
@@ -383,15 +419,30 @@ function chartFromMermaid(source: string): Chart {
     rows.set(level, [...(rows.get(level) ?? []), id]);
   }
 
+  const sizes = new Map(ids.map((id) => [id, importedBoxSize(nodes.get(id) ?? id)]));
+  const rowHeights = new Map([...rows].map(([level, row]) => [level, Math.max(...row.map((id) => sizes.get(id)?.h ?? BOX_H))]));
+  const sortedLevels = [...rows.keys()].sort((a, b) => a - b);
+  let y = PAD;
+  const rowY = new Map<number, number>();
+  for (const level of sortedLevels) {
+    rowY.set(level, y);
+    y += (rowHeights.get(level) ?? BOX_H) + GAP;
+  }
+
   const boxes: Box[] = ids.map((id, idIndex) => {
     const level = levels.get(id) ?? 0;
-    const index = rows.get(level)?.indexOf(id) ?? 0;
+    const row = rows.get(level) ?? [];
+    let x = PAD;
+    for (const previous of row.slice(0, row.indexOf(id))) {
+      x += (sizes.get(previous)?.w ?? BOX_W) + GAP * 2;
+    }
+    const size = sizes.get(id) ?? { w: BOX_W, h: BOX_H };
     return {
       id: `b${idIndex + 1}`,
-      x: PAD + index * (BOX_W + GAP * 2),
-      y: PAD + level * (BOX_H + GAP),
-      w: BOX_W,
-      h: BOX_H,
+      x,
+      y: rowY.get(level) ?? PAD,
+      w: size.w,
+      h: size.h,
       text: nodes.get(id) ?? id,
     };
   });
