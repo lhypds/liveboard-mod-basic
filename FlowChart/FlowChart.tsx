@@ -7,6 +7,8 @@ type Lang = "en" | "ja" | "zh";
 type Strings = {
   box: string;
   arrow: string;
+  importMermaid: string;
+  exportMermaid: string;
   undo: string;
   redo: string;
   remove: string;
@@ -17,6 +19,8 @@ const STRINGS: Record<Lang, Strings> = {
   en: {
     box: "Add box",
     arrow: "Draw arrow",
+    importMermaid: "Import",
+    exportMermaid: "Export",
     undo: "Undo",
     redo: "Redo",
     remove: "Delete selected",
@@ -25,6 +29,8 @@ const STRINGS: Record<Lang, Strings> = {
   ja: {
     box: "ボックス追加",
     arrow: "矢印を引く",
+    importMermaid: "インポート",
+    exportMermaid: "エクスポート",
     undo: "元に戻す",
     redo: "やり直す",
     remove: "選択を削除",
@@ -33,6 +39,8 @@ const STRINGS: Record<Lang, Strings> = {
   zh: {
     box: "添加方框",
     arrow: "画箭头",
+    importMermaid: "导入",
+    exportMermaid: "导出",
     undo: "撤销",
     redo: "重做",
     remove: "删除所选",
@@ -287,6 +295,124 @@ function freeSpot(boxes: Box[], x: number, y: number): Point {
   return spot;
 }
 
+function cleanMermaidLabel(label: string): string {
+  return label
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\"/g, '"');
+}
+
+function readMermaidNode(raw: string): { id: string; text?: string } | null {
+  const token = raw
+    .trim()
+    .replace(/^\|[^|]*\|\s*/, "")
+    .replace(/;$/, "")
+    .trim();
+  const match = token.match(/^([A-Za-z0-9_-]+)\s*(?:\[([^\]]*)\]|\(([^)]*)\)|\{([^}]*)\})?/);
+  if (!match) return null;
+  return {
+    id: match[1],
+    text: [match[2], match[3], match[4]].find((label) => label !== undefined),
+  };
+}
+
+function chartFromMermaid(source: string): Chart {
+  const nodes = new Map<string, string>();
+  const edges: Array<{ from: string; to: string }> = [];
+
+  for (const rawLine of source.split(/\r?\n/)) {
+    const line = rawLine.replace(/%%.*$/, "").trim();
+    if (!line || /^(flowchart|graph)\b/i.test(line)) continue;
+
+    const edge = line.match(/^(.*?)\s*(?:-->|---|==>|-.->)\s*(.*?)$/);
+    if (edge) {
+      const from = readMermaidNode(edge[1]);
+      const to = readMermaidNode(edge[2]);
+      if (!from || !to || from.id === to.id) continue;
+      nodes.set(from.id, cleanMermaidLabel(from.text ?? nodes.get(from.id) ?? from.id));
+      nodes.set(to.id, cleanMermaidLabel(to.text ?? nodes.get(to.id) ?? to.id));
+      if (!edges.some((item) => item.from === from.id && item.to === to.id)) edges.push({ from: from.id, to: to.id });
+      continue;
+    }
+
+    const node = readMermaidNode(line);
+    if (node) nodes.set(node.id, cleanMermaidLabel(node.text ?? nodes.get(node.id) ?? node.id));
+  }
+
+  const ids = [...nodes.keys()];
+  const incoming = new Map(ids.map((id) => [id, 0]));
+  const outgoing = new Map(ids.map((id) => [id, [] as string[]]));
+  for (const edge of edges) {
+    incoming.set(edge.to, (incoming.get(edge.to) ?? 0) + 1);
+    outgoing.get(edge.from)?.push(edge.to);
+  }
+
+  const levels = new Map<string, number>();
+  const queue = ids.filter((id) => !incoming.get(id));
+  if (!queue.length) queue.push(...ids);
+  for (const id of queue) levels.set(id, 0);
+
+  while (queue.length) {
+    const id = queue.shift();
+    if (!id) continue;
+    const nextLevel = (levels.get(id) ?? 0) + 1;
+    for (const to of outgoing.get(id) ?? []) {
+      if ((levels.get(to) ?? -1) < nextLevel) levels.set(to, nextLevel);
+      incoming.set(to, (incoming.get(to) ?? 1) - 1);
+      if (incoming.get(to) === 0) queue.push(to);
+    }
+  }
+
+  for (const id of ids) if (!levels.has(id)) levels.set(id, 0);
+  const rows = new Map<number, string[]>();
+  for (const id of ids) {
+    const level = levels.get(id) ?? 0;
+    rows.set(level, [...(rows.get(level) ?? []), id]);
+  }
+
+  const boxes: Box[] = ids.map((id, idIndex) => {
+    const level = levels.get(id) ?? 0;
+    const index = rows.get(level)?.indexOf(id) ?? 0;
+    return {
+      id: `b${idIndex + 1}`,
+      x: PAD + index * (BOX_W + GAP * 2),
+      y: PAD + level * (BOX_H + GAP),
+      w: BOX_W,
+      h: BOX_H,
+      text: nodes.get(id) ?? id,
+    };
+  });
+  const idMap = new Map(ids.map((id, index) => [id, boxes[index].id]));
+  const arrows: Arrow[] = edges.flatMap((edge, index) => {
+    const from = idMap.get(edge.from);
+    const to = idMap.get(edge.to);
+    return from && to ? [{ id: `a${index + 1}`, from, to }] : [];
+  });
+
+  return { boxes, arrows };
+}
+
+function mermaidId(id: string): string {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(id) ? id : `node_${id.replace(/[^A-Za-z0-9_]/g, "_")}`;
+}
+
+function mermaidLabel(text: string): string {
+  return text.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r?\n/g, "<br/>");
+}
+
+function chartToMermaid(chart: Chart): string {
+  const ids = new Map(chart.boxes.map((box) => [box.id, mermaidId(box.id)]));
+  const lines = ["flowchart TD", ...chart.boxes.map((box) => `  ${ids.get(box.id)}["${mermaidLabel(box.text || box.id)}"]`)];
+  for (const arrow of chart.arrows) {
+    const from = ids.get(arrow.from);
+    const to = ids.get(arrow.to);
+    if (from && to) lines.push(`  ${from} --> ${to}`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 type ChartBoxProps = {
   box: Box;
   selected: boolean;
@@ -409,8 +535,10 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
   const [link, setLink] = useState<Link | null>(null);
   const [marquee, setMarquee] = useState<Marquee | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [mermaidOpen, setMermaidOpen] = useState(false);
 
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
   // Whether this editing session has already put a step on the Undo stack. Typing is one step,
   // not one per keystroke — otherwise a word costs as many Undos as it has letters.
@@ -596,6 +724,40 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
     edit({ boxes: [], arrows: [] });
     setSelected(null);
     setEditing(null);
+  }
+
+  function exportMermaid() {
+    const blob = new Blob([chartToMermaid(chart)], { type: "text/vnd.mermaid;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "flowchart.mmd";
+    a.click();
+    URL.revokeObjectURL(url);
+    setMermaidOpen(false);
+  }
+
+  function importMermaidClick() {
+    fileInputRef.current?.click();
+    setMermaidOpen(false);
+  }
+
+  function handleMermaidFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = typeof ev.target?.result === "string" ? ev.target.result : "";
+      const next = chartFromMermaid(text);
+      if (!next.boxes.length) return;
+      edit(next);
+      setSelected(null);
+      setEditing(null);
+      setArrowMode(false);
+      setLink(null);
+    };
+    reader.readAsText(file);
+    e.target.value = "";
   }
 
   function handleSurfacePointerDown(e: React.PointerEvent<HTMLDivElement>) {
@@ -966,6 +1128,51 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
               <path d="M6 7l1 13h10l1-13" />
             </svg>
           </button>
+        </div>
+
+        <div
+          className={styles.menu}
+          data-open={mermaidOpen ? "" : undefined}
+          onPointerEnter={() => setMermaidOpen(true)}
+          onPointerLeave={() => setMermaidOpen(false)}
+          onFocus={() => setMermaidOpen(true)}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setMermaidOpen(false);
+          }}
+        >
+          <button
+            type="button"
+            className={`${styles.button} ${styles.mermaidButton}`}
+            title="Mermaid"
+            aria-label="Mermaid"
+            aria-haspopup="menu"
+            aria-expanded={mermaidOpen}
+          >
+            <span className={styles.mermaidMark} aria-hidden="true">
+              M
+            </span>
+          </button>
+          <div className={styles.menuDropdown} role="menu">
+            <button type="button" className={styles.menuOption} role="menuitem" onClick={importMermaidClick}>
+              {strings.importMermaid}
+            </button>
+            <button
+              type="button"
+              className={styles.menuOption}
+              role="menuitem"
+              disabled={!boxes.length}
+              onClick={exportMermaid}
+            >
+              {strings.exportMermaid}
+            </button>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".mmd,.mermaid,.txt,text/plain,text/vnd.mermaid"
+            className={styles.fileInput}
+            onChange={handleMermaidFile}
+          />
         </div>
       </div>
 

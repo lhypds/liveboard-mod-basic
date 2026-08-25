@@ -58,6 +58,84 @@
   cursor: default;
 }
 
+.mermaidMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 11px;
+  height: 11px;
+  font-family: var(--font-title);
+  font-size: 11px;
+  line-height: 11px;
+}
+
+.mermaidButton {
+  width: 22px;
+  min-width: 22px;
+  padding: 0;
+  user-select: none;
+}
+
+.fileInput {
+  display: none;
+}
+
+.menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.menuDropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 2;
+  display: none;
+  flex-direction: column;
+  background: transparent;
+}
+
+.menu[data-open] .menuDropdown {
+  display: flex;
+}
+
+.menuOption {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  height: 22px;
+  padding: 2px 8px;
+  border: 1px solid #000;
+  border-top: none;
+  background: #fff;
+  color: #0f172a;
+  font-family: var(--font-title);
+  font-size: 11px;
+  line-height: 1;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.menuOption:first-child {
+  border-top: 1px solid #000;
+}
+
+.menuOption:hover {
+  background: #000;
+  color: #fff;
+}
+
+.menuOption:disabled {
+  color: #d4d4d4;
+  cursor: default;
+}
+
+.menuOption:disabled:hover {
+  background: #fff;
+  color: #d4d4d4;
+}
+
 .icon {
   width: 11px;
   height: 11px;
