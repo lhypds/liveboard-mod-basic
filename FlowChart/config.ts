@@ -15,6 +15,22 @@ export const config = {
           },
         },
         {
+          key: { en: "Several at once", ja: "まとめて選ぶ", zh: "多选" },
+          value: {
+            en: "Drag on the empty sheet to draw a dashed box round several; dragging any one of them then moves the whole group",
+            ja: "空白部分をドラッグすると破線の枠で複数を囲めます。そのうち1つをドラッグすれば全体が動きます",
+            zh: "在空白处拖动可用虚线框选中多个；再拖动其中任意一个即可整组移动",
+          },
+        },
+        {
+          key: { en: "Size", ja: "サイズ", zh: "尺寸" },
+          value: {
+            en: "A picked box shows a square at each corner; drag one to resize it, holding the opposite corner where it is",
+            ja: "選択中のボックスは四隅に四角が出ます。ドラッグでサイズを変更し、対角はその場に留まります",
+            zh: "选中的方框四角会出现小方块；拖动即可调整大小，对角保持不动",
+          },
+        },
+        {
           key: { en: "Arrows", ja: "矢印", zh: "箭头" },
           value: {
             en: "Pull one from a box's edge handle onto another box, or press the arrow button and click the two boxes in turn",
@@ -33,9 +49,9 @@ export const config = {
         {
           key: { en: "Keys", ja: "キー", zh: "按键" },
           value: {
-            en: "Enter edits the selected box, Delete removes the selection, Escape drops it",
-            ja: "Enter で選択中のボックスを編集、Delete で削除、Escape で選択解除",
-            zh: "Enter 编辑选中方框，Delete 删除所选，Escape 取消选择",
+            en: "N adds a box, D removes the selection (as Delete does), Enter edits the one selected box, Escape drops the selection",
+            ja: "N でボックス追加、D で選択を削除（Delete と同じ）、Enter で選択中の1つを編集、Escape で選択解除",
+            zh: "N 添加方框，D 删除所选（同 Delete），Enter 编辑选中的那一个，Escape 取消选择",
           },
         },
         {

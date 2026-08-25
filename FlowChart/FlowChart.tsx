@@ -59,9 +59,18 @@ const SLOP = 4;
 /** How far back Undo reaches, in edits. */
 const MAX_HISTORY = 100;
 
-/* The only ink on the card. A picked box or arrow is drawn twice as heavy rather than in a
-   second colour — see the selection rule in the stylesheet. */
+/* The only ink on the card. Nothing here is marked by a second colour — see the selection rule in
+   the stylesheet for what a picked box does instead. */
 const INK = "#0f172a";
+
+/**
+ * What a picked arrow's hairline thickens to. A shade over the 1px every other arrow is drawn at:
+ * a box says it is picked by putting its handles out, and an arrow, having no corners to put any
+ * on, has only its own weight to say it with — but it is still one line among a chart of them, and
+ * a line drawn at twice the others' weight reads as a different kind of arrow rather than as the
+ * same one, picked.
+ */
+const PICKED_STROKE = 1.5;
 
 /** Where a box's four link handles sit, as percentages of its own box. */
 const PORTS = [
@@ -103,21 +112,35 @@ type Comp = {
   updatedAt?: number;
 };
 
-/** What the toolbar's Delete and the Delete key act on. Session state, never saved. */
-type Selection = { kind: "box" | "arrow"; id: string };
+/**
+ * What the toolbar's Delete and the Delete key act on. Boxes come as a list because a marquee
+ * picks up however many it is dragged over; an arrow is only ever picked one at a time, since
+ * there is nothing to do to several of them at once that Delete does not already do. Session
+ * state, never saved.
+ */
+type Selection = { kind: "boxes"; ids: string[] } | { kind: "arrow"; id: string };
 
-/** A box being dragged right now, with the grab offset that keeps it under the pointer. */
+/**
+ * The boxes being dragged right now — one, or the whole picked group if the press landed on a box
+ * already in it. `from` is where each of them was when the press landed and `dx`,`dy` is the one
+ * offset applied to all, so a group keeps its shape exactly and a drag that comes back to where it
+ * started leaves every box where it was.
+ */
 type Drag = {
   pointerId: number;
-  id: string;
-  offX: number;
-  offY: number;
+  from: Record<string, Point>;
+  /** How far left and up the group can go before its leftmost or topmost box leaves the sheet. */
+  minX: number;
+  minY: number;
   startX: number;
   startY: number;
-  x: number;
-  y: number;
+  dx: number;
+  dy: number;
   moved: boolean;
 };
+
+/** The dashed box being dragged over the sheet to pick up everything under it. */
+type Marquee = { pointerId: number; x0: number; y0: number; x: number; y: number; active: boolean };
 
 /**
  * A box being resized right now. `start` is the box as the corner was taken hold of, so every
@@ -205,6 +228,24 @@ function border(box: Box, to: Point): Point {
 
 function hits(box: Box, x: number, y: number): boolean {
   return x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h;
+}
+
+/** The marquee as a rectangle, whichever way round it was dragged out. */
+function marqueeRect(m: Marquee): { x: number; y: number; w: number; h: number } {
+  return {
+    x: Math.min(m.x0, m.x),
+    y: Math.min(m.y0, m.y),
+    w: Math.abs(m.x - m.x0),
+    h: Math.abs(m.y - m.y0),
+  };
+}
+
+/**
+ * Whether the box overlaps the rectangle at all. Touching is enough — a marquee that had to
+ * swallow a box whole would mean drawing round the far corners of a chart to pick up its middle.
+ */
+function touches(box: Box, r: { x: number; y: number; w: number; h: number }): boolean {
+  return box.x < r.x + r.w && box.x + box.w > r.x && box.y < r.y + r.h && box.y + box.h > r.y;
 }
 
 /** Whether a box put down at `spot` would land on top of an existing one. */
@@ -366,6 +407,7 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
   const [drag, setDrag] = useState<Drag | null>(null);
   const [resize, setResize] = useState<Resize | null>(null);
   const [link, setLink] = useState<Link | null>(null);
+  const [marquee, setMarquee] = useState<Marquee | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
 
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -476,9 +518,19 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
     return undefined;
   }
 
+  /** The picked boxes, in the order the chart holds them. Empty when an arrow is picked instead. */
+  const picked = selected?.kind === "boxes" ? selected.ids : [];
+
+  /** The one picked box, or nothing when a marquee has picked several — see {@link addNext}. */
+  const onlyPicked = picked.length === 1 ? boxes.find((box) => box.id === picked[0]) : undefined;
+
+  function pickBox(id: string) {
+    setSelected({ kind: "boxes", ids: [id] });
+  }
+
   function startEditing(id: string) {
     textStepRef.current = false;
-    setSelected({ kind: "box", id });
+    pickBox(id);
     setEditing(id);
   }
 
@@ -504,13 +556,11 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
 
   /**
    * Tab: the next box in the chain, drawn to the right of the one being worked on and joined to
-   * it. With nothing selected the chain carries on from the newest box, which is the one a Tab
-   * before this put there.
+   * it. With nothing picked — or with a whole group picked, where there is no one box the chain is
+   * at — it carries on from the newest box, which is the one a Tab before this put there.
    */
   function addNext() {
-    const source =
-      (selected?.kind === "box" ? boxes.find((box) => box.id === selected.id) : undefined) ??
-      boxes[boxes.length - 1];
+    const source = onlyPicked ?? boxes[boxes.length - 1];
     if (!source) {
       handleAdd();
       return;
@@ -530,9 +580,10 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
       edit({ boxes, arrows: arrows.filter((arrow) => arrow.id !== selected.id) });
     } else {
       // An arrow's two ends are the only thing holding it up, so a deleted box takes them with it
+      const gone = new Set(selected.ids);
       edit({
-        boxes: boxes.filter((box) => box.id !== selected.id),
-        arrows: arrows.filter((arrow) => arrow.from !== selected.id && arrow.to !== selected.id),
+        boxes: boxes.filter((box) => !gone.has(box.id)),
+        arrows: arrows.filter((arrow) => !gone.has(arrow.from) && !gone.has(arrow.to)),
       });
     }
     setSelected(null);
@@ -547,11 +598,15 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
     setEditing(null);
   }
 
-  function handleSurfacePointerDown() {
+  function handleSurfacePointerDown(e: React.PointerEvent<HTMLDivElement>) {
     setSelected(null);
     setEditing(null);
     setLink(null);
     surfaceRef.current?.focus();
+    // Arrow mode is waiting on a box to be pressed, not on a region to be drawn round
+    if (e.button !== 0 || arrowMode) return;
+    const point = toLocal(e);
+    setMarquee({ pointerId: e.pointerId, x0: point.x, y0: point.y, x: point.x, y: point.y, active: false });
   }
 
   function handleBoxPointerDown(e: React.PointerEvent<HTMLDivElement>, box: Box) {
@@ -568,32 +623,37 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
       if (link) {
         connect(link.from, box.id);
         setLink(null);
-        setSelected({ kind: "box", id: box.id });
+        pickBox(box.id);
         return;
       }
       setLink({ pointerId: null, from: box.id, ...center(box) });
-      setSelected({ kind: "box", id: box.id });
+      pickBox(box.id);
       return;
     }
 
     // A press inside the box being typed into is the caret being placed, not a drag
     if (editing === box.id) return;
 
-    setSelected({ kind: "box", id: box.id });
+    // A box already in the picked group keeps the group and takes it along; one outside it becomes
+    // the whole of the selection. Pressing a member to collapse the group onto it would leave a
+    // marquee with nothing to do — the press that moves the group is the same press.
+    const group = picked.includes(box.id) ? picked : [box.id];
+    if (group.length === 1) pickBox(box.id);
     setEditing(null);
     surfaceRef.current?.focus();
 
+    const moving = boxes.filter((b) => group.includes(b.id));
     // The pointer is not captured yet, on purpose — see handlePointerMove
     const point = toLocal(e);
     setDrag({
       pointerId: e.pointerId,
-      id: box.id,
-      offX: point.x - box.x,
-      offY: point.y - box.y,
+      from: Object.fromEntries(moving.map((b) => [b.id, { x: b.x, y: b.y }])),
+      minX: Math.min(...moving.map((b) => b.x)),
+      minY: Math.min(...moving.map((b) => b.y)),
       startX: point.x,
       startY: point.y,
-      x: box.x,
-      y: box.y,
+      dx: 0,
+      dy: 0,
       moved: false,
     });
   }
@@ -605,7 +665,7 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
     const point = toLocal(e);
     surfaceRef.current?.setPointerCapture(e.pointerId);
     surfaceRef.current?.focus();
-    setSelected({ kind: "box", id: box.id });
+    pickBox(box.id);
     setEditing(null);
     setLink({ pointerId: e.pointerId, from: box.id, x: point.x, y: point.y });
   }
@@ -619,7 +679,7 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
     // unlike a box this takes the pointer straight away
     surfaceRef.current?.setPointerCapture(e.pointerId);
     surfaceRef.current?.focus();
-    setSelected({ kind: "box", id: box.id });
+    pickBox(box.id);
     setEditing(null);
     setResize({
       pointerId: e.pointerId,
@@ -643,6 +703,14 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
   }
 
   function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (marquee && marquee.pointerId === e.pointerId) {
+      const point = toLocal(e);
+      const active = marquee.active || Math.hypot(point.x - marquee.x0, point.y - marquee.y0) > SLOP;
+      // Same as the box drag below: the pointer is only taken once the press turns out to be one
+      if (active && !marquee.active) surfaceRef.current?.setPointerCapture(e.pointerId);
+      setMarquee({ ...marquee, x: point.x, y: point.y, active });
+      return;
+    }
     if (resize && resize.pointerId === e.pointerId) {
       const point = toLocal(e);
       const next = resized(resize.start, resize.corner, point.x - resize.startX, point.y - resize.startY);
@@ -653,8 +721,11 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
     }
     if (drag && drag.pointerId === e.pointerId) {
       const point = toLocal(e);
-      const x = Math.max(0, snap(point.x - drag.offX));
-      const y = Math.max(0, snap(point.y - drag.offY));
+      // One offset for the whole group, snapped once: snapping each box on its own would shear a
+      // group that was not laid out on the grid to begin with. Clamped so the box furthest left or
+      // furthest up is what stops at the edge, and the rest keep their places behind it.
+      const dx = Math.max(snap(point.x - drag.startX), -drag.minX);
+      const dy = Math.max(snap(point.y - drag.startY), -drag.minY);
       // Under the slop the press is still a click: a box nudged by a pixel on the way to a
       // double-click should not end up on a different grid cell
       const moved = drag.moved || Math.hypot(point.x - drag.startX, point.y - drag.startY) > SLOP;
@@ -664,7 +735,7 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
       // retargets the click and the double-click behind it at whatever holds the capture, and
       // the double-click on the box is how it is opened to be typed into.
       if (moved && !drag.moved) surfaceRef.current?.setPointerCapture(e.pointerId);
-      if (x !== drag.x || y !== drag.y || moved !== drag.moved) setDrag({ ...drag, x, y, moved });
+      if (dx !== drag.dx || dy !== drag.dy || moved !== drag.moved) setDrag({ ...drag, dx, dy, moved });
       return;
     }
     if (link && (link.pointerId === null || link.pointerId === e.pointerId)) {
@@ -675,6 +746,17 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
 
   // One save per drag rather than per frame: a save rewrites the whole board
   function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (marquee && marquee.pointerId === e.pointerId) {
+      const region = marqueeRect(marquee);
+      const wasActive = marquee.active;
+      setMarquee(null);
+      // A press that never became a drag is the plain click on the sheet it looked like, and that
+      // already cleared the selection on the way down
+      if (!wasActive) return;
+      const ids = boxes.filter((box) => touches(box, region)).map((box) => box.id);
+      setSelected(ids.length ? { kind: "boxes", ids } : null);
+      return;
+    }
     if (resize && resize.pointerId === e.pointerId) {
       const box = boxes.find((b) => b.id === resize.id);
       setResize(null);
@@ -689,11 +771,13 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
       return;
     }
     if (drag && drag.pointerId === e.pointerId) {
-      const box = boxes.find((b) => b.id === drag.id);
       setDrag(null);
-      if (drag.moved && box && (box.x !== drag.x || box.y !== drag.y)) {
+      if (drag.moved && (drag.dx !== 0 || drag.dy !== 0)) {
         edit({
-          boxes: boxes.map((b) => (b.id === drag.id ? { ...b, x: drag.x, y: drag.y } : b)),
+          boxes: boxes.map((b) => {
+            const origin = drag.from[b.id];
+            return origin ? { ...b, x: origin.x + drag.dx, y: origin.y + drag.dy } : b;
+          }),
           arrows,
         });
       }
@@ -710,21 +794,33 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
     // Keys typed into a box bubble up here; that box's own handler has already had them
     if (editing) return;
 
+    // The letter shortcuts are bare letters only: Cmd+N opens a browser window and Ctrl+D bookmarks
+    // the page, and neither of those is this card's to take
+    const bare = !e.altKey && !e.ctrlKey && !e.metaKey;
+    const letter = bare ? e.key.toLowerCase() : "";
+
     // Tab belongs to the chart while the chart has the focus; Shift+Tab is left alone, so it is
     // still the way out of the card
-    if (e.key === "Tab" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+    if (e.key === "Tab" && !e.shiftKey && bare) {
       e.preventDefault();
       addNext();
       return;
     }
-    if (e.key === "Enter" && selected?.kind === "box") {
+    // N adds a box on its own, where Tab adds one on the end of the chain
+    if (letter === "n") {
       e.preventDefault();
-      startEditing(selected.id);
+      handleAdd();
       return;
     }
-    // Taken even with nothing selected: Backspace left to the browser is a page back on the
-    // browsers that still bind it, and the board would be gone with it
-    if (e.key === "Delete" || e.key === "Backspace") {
+    if (e.key === "Enter" && onlyPicked) {
+      e.preventDefault();
+      startEditing(onlyPicked.id);
+      return;
+    }
+    // D for the hand that is already on N, Delete and Backspace for the one that is not. Taken
+    // even with nothing selected: Backspace left to the browser is a page back on the browsers
+    // that still bind it, and the board would be gone with it
+    if (e.key === "Delete" || e.key === "Backspace" || letter === "d") {
       e.preventDefault();
       removeSelected();
       return;
@@ -763,11 +859,16 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
     persist({ boxes: boxes.map((box) => (box.id === editing ? { ...box, text } : box)), arrows });
   }
 
-  // Where a box is on screen: the config's position, or the drag's if it is the one being moved.
-  // The arrows read from here too, which is the whole of "the arrow follows the box".
-  const placed = boxes.map((box) =>
-    drag && drag.id === box.id && drag.moved ? { ...box, x: drag.x, y: drag.y } : box,
-  );
+  // Where a box is on screen: what the config says, or what the drag or resize in progress says if
+  // it is the one under the pointer. The arrows read from here too, which is the whole of "the
+  // arrows follow the box" — they re-route as it is resized just as they do as it is moved.
+  const moving = drag?.moved ? drag : null;
+  const placed = boxes.map((box) => {
+    const origin = moving?.from[box.id];
+    if (origin) return { ...box, x: origin.x + moving.dx, y: origin.y + moving.dy };
+    if (resize && resize.id === box.id) return { ...box, x: resize.x, y: resize.y, w: resize.w, h: resize.h };
+    return box;
+  });
   const byId = new Map(placed.map((box) => [box.id, box]));
 
   const extent = placed.reduce((acc, box) => ({ x: Math.max(acc.x, box.x + box.w), y: Math.max(acc.y, box.y + box.h) }), {
@@ -908,7 +1009,7 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
                     x2={tip.x}
                     y2={tip.y}
                     stroke={INK}
-                    strokeWidth={on ? 2 : 1}
+                    strokeWidth={on ? PICKED_STROKE : 1}
                     markerEnd={`url(#${head})`}
                   />
                   {/* Fat, invisible, and the only part of the arrow a pointer can reach: a
@@ -942,17 +1043,32 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
             <ChartBox
               key={box.id}
               box={box}
-              selected={selected?.kind === "box" && selected.id === box.id}
+              selected={picked.includes(box.id)}
               editing={editing === box.id}
               editRef={editRef}
               onPointerDown={handleBoxPointerDown}
               onPortPointerDown={handlePortPointerDown}
+              onCornerPointerDown={handleCornerPointerDown}
               onOpen={startEditing}
               onChange={handleTextChange}
               onKeyDown={handleTextKeyDown}
               onClose={closeEditing}
             />
           ))}
+
+          {/* The region being drawn round the boxes to pick them up. Over them rather than under:
+              it is the thing being dragged, and a group of boxes would otherwise hide most of it. */}
+          {marquee?.active && (
+            <div
+              className={styles.marquee}
+              style={{
+                left: marqueeRect(marquee).x,
+                top: marqueeRect(marquee).y,
+                width: marqueeRect(marquee).w,
+                height: marqueeRect(marquee).h,
+              }}
+            />
+          )}
         </div>
       </div>
     </div>

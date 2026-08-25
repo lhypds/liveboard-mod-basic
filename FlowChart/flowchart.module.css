@@ -147,12 +147,17 @@
   touch-action: none;
 }
 
-/* Picked things on this card are drawn twice as heavy — a box's border here, an arrow's stroke in
-   the render. Weight rather than a colour: the whole board is black on white, and one card putting
-   a blue on it would be the only colour on the wall. The box-sizing above keeps the second px on
-   the inside, so a box does not move or resize as it is picked. */
+/* A picked box thickens by half a pixel and puts its corner handles out. Half, not a whole one —
+   the same measure a picked arrow is drawn at (PICKED_STROKE in the render), and enough to read as
+   picked without reading as a different kind of box. `box-sizing` above keeps that half on the
+   inside, so a box does not move or resize as it is picked. Neither mark is a colour: the whole
+   board is black on white, and one card putting a blue on it would be the only colour on the wall. */
 .box[data-selected] {
-  border-width: 2px;
+  /* Not `border-width: 1.5px`: a border width is floored to whole CSS pixels, so that paints as
+     the 1px it already was. A shadow's spread is not, and an inset one lays its half pixel just
+     inside the border, against it — 1.5px of ink in all, and none of it outside the box's own
+     bounds, so nothing round it shifts. */
+  box-shadow: inset 0 0 0 0.5px #000;
 }
 
 /* In arrow mode the whole box is a target, and nothing in it is draggable */
@@ -220,5 +225,40 @@
 
 /* Arrow mode draws its own arrows; a handle there would only be a second way to start the same one */
 .surface[data-linking] .port {
+  display: none;
+}
+
+/* The region being dragged out over the sheet. Dashed like the arrow being drawn, and for the same
+   reason: it is a thing in progress rather than a thing on the chart. Deaf to the pointer, which
+   is still the one drawing it. */
+.marquee {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px dashed #0f172a;
+  pointer-events: none;
+}
+
+/* The corners a box is resized by. Square where the link handles are round, and hidden the same
+   way — out of the pointer's reach until the box is picked, so a press near a corner of an
+   unpicked box still takes hold of the box itself. */
+.corner {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  box-sizing: border-box;
+  border: 1px solid #000;
+  background: #fff;
+  visibility: hidden;
+  touch-action: none;
+}
+
+/* The other half of the picked mark; see the border rule above */
+.box[data-selected] .corner {
+  visibility: visible;
+}
+
+/* Arrow mode is about the arrows; a corner grabbed there would resize instead of linking */
+.surface[data-linking] .corner {
   display: none;
 }
