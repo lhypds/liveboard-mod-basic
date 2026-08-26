@@ -53,7 +53,7 @@ export const config = {
     // pixels, so a resized card scales the drawing instead of cropping it.
     strokes: [],
     // The toolbar's current pick, kept here so a card reopens as the user left it
-    color: "#334155",
+    color: "#000000",
     // Pen width in px, as drawn at the card's width at the time
     size: 3,
     erasing: false,
