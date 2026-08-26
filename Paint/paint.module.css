@@ -43,7 +43,7 @@
   box-shadow: inset 0 0 0 2px #fff;
 }
 
-/* Kept small on purpose: eight colours, four widths, two modes and three actions share one row on a
+/* Kept small on purpose: nine colours, four widths, two modes and three actions share one row on a
    default-sized card, and this is what keeps them from wrapping onto a second */
 .button {
   display: inline-flex;

@@ -45,10 +45,11 @@ const STRINGS: Record<Lang, Strings> = {
 };
 
 /**
- * The swatch row: a soft ink to write with, then seven brights. `comp.color` is drawn with whatever
- * it says — a colour typed into the Edit modal works, it just leaves no swatch showing as picked.
+ * The swatch row: black and a grey to write with, then seven brights. `comp.color` is drawn with
+ * whatever it says — a colour typed into the Edit modal works, it just leaves no swatch showing as
+ * picked.
  */
-const COLORS = ["#334155", "#ef4444", "#f97316", "#facc15", "#22c55e", "#06b6d4", "#3b82f6", "#a855f7"];
+const COLORS = ["#000000", "#9ca3af", "#ef4444", "#f97316", "#facc15", "#22c55e", "#06b6d4", "#3b82f6", "#a855f7"];
 
 /** Pen widths in px, as drawn at the card's width at the time. */
 const WIDTHS = [1, 3, 6, 12];
