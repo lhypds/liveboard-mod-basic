@@ -338,17 +338,67 @@ function textWidth(text: string): number {
   return width;
 }
 
-function importedBoxSize(text: string): { w: number; h: number } {
-  const lines = (text || " ").split(/\r?\n/);
-  const longest = Math.max(...lines.map(textWidth));
-  const naturalW = Math.ceil(longest + TEXT_PAD_X);
-  const w = snapUp(Math.max(MIN_W, Math.min(IMPORT_MAX_W, naturalW)));
+/**
+ * The width a label would like to have, before the column settles on one width for all of them.
+ * Floored at the width of a box added by hand, so a one-word node is still a box rather than a
+ * chip, and capped, so a sentence is wrapped rather than drawn as one very long line.
+ */
+function importedBoxWidth(text: string): number {
+  const longest = Math.max(...(text || " ").split(/\r?\n/).map(textWidth));
+  return snapUp(Math.max(BOX_W, Math.min(IMPORT_MAX_W, Math.ceil(longest + TEXT_PAD_X))));
+}
+
+/** How tall a box has to be for its label once that label has wrapped inside a box `w` wide. */
+function importedBoxHeight(text: string, w: number): number {
   const innerW = Math.max(1, w - TEXT_PAD_X);
+  const lines = (text || " ").split(/\r?\n/);
   const lineCount = lines.reduce((count, line) => count + Math.max(1, Math.ceil(textWidth(line || " ") / innerW)), 0);
-  return {
-    w,
-    h: snapUp(Math.max(MIN_H, Math.ceil(lineCount * TEXT_LINE + TEXT_PAD_Y))),
-  };
+  return snapUp(Math.max(BOX_H, Math.ceil(lineCount * TEXT_LINE + TEXT_PAD_Y)));
+}
+
+/**
+ * The order the imported nodes are stacked in, top to bottom. A node is only placed once
+ * everything pointing into it has been, so every arrow that can point down the column does, and
+ * the chart reads in the order the flow runs.
+ *
+ * Which of the nodes that are ready goes next is what keeps a branching chart legible in one
+ * column: a successor of the node just placed wins, so a chain stays together and each of its
+ * arrows has only the gap between two boxes to cross. Failing that, the earliest node in the file,
+ * so a chart with several starts is stacked the way it was written. Anything still not ready when
+ * that runs out is in a cycle and goes on the end in file order — one of its arrows has to point
+ * back up the column whatever is done with it.
+ */
+function orderNodes(ids: string[], edges: Array<{ from: string; to: string }>): string[] {
+  const rank = new Map(ids.map((id, index) => [id, index]));
+  const incoming = new Map(ids.map((id) => [id, 0]));
+  const outgoing = new Map(ids.map((id) => [id, [] as string[]]));
+  for (const edge of edges) {
+    incoming.set(edge.to, (incoming.get(edge.to) ?? 0) + 1);
+    outgoing.get(edge.from)?.push(edge.to);
+  }
+
+  const order: string[] = [];
+  const placed = new Set<string>();
+  const ready = new Set(ids.filter((id) => !incoming.get(id)));
+  let last: string | null = null;
+
+  while (ready.size) {
+    const next =
+      (last && (outgoing.get(last) ?? []).find((id) => ready.has(id))) ||
+      [...ready].reduce((best, id) => ((rank.get(id) ?? 0) < (rank.get(best) ?? 0) ? id : best));
+    ready.delete(next);
+    order.push(next);
+    placed.add(next);
+    last = next;
+    for (const to of outgoing.get(next) ?? []) {
+      const left = (incoming.get(to) ?? 1) - 1;
+      incoming.set(to, left);
+      if (left === 0) ready.add(to);
+    }
+  }
+
+  for (const id of ids) if (!placed.has(id)) order.push(id);
+  return order;
 }
 
 function readMermaidNode(raw: string): { id: string; text?: string } | null {
@@ -388,65 +438,25 @@ function chartFromMermaid(source: string): Chart {
     if (node) nodes.set(node.id, cleanMermaidLabel(node.text ?? nodes.get(node.id) ?? node.id));
   }
 
-  const ids = [...nodes.keys()];
-  const incoming = new Map(ids.map((id) => [id, 0]));
-  const outgoing = new Map(ids.map((id) => [id, [] as string[]]));
-  for (const edge of edges) {
-    incoming.set(edge.to, (incoming.get(edge.to) ?? 0) + 1);
-    outgoing.get(edge.from)?.push(edge.to);
-  }
+  const order = orderNodes([...nodes.keys()], edges);
 
-  const levels = new Map<string, number>();
-  const queue = ids.filter((id) => !incoming.get(id));
-  if (!queue.length) queue.push(...ids);
-  for (const id of queue) levels.set(id, 0);
-
-  while (queue.length) {
-    const id = queue.shift();
-    if (!id) continue;
-    const nextLevel = (levels.get(id) ?? 0) + 1;
-    for (const to of outgoing.get(id) ?? []) {
-      if ((levels.get(to) ?? -1) < nextLevel) levels.set(to, nextLevel);
-      incoming.set(to, (incoming.get(to) ?? 1) - 1);
-      if (incoming.get(to) === 0) queue.push(to);
-    }
-  }
-
-  for (const id of ids) if (!levels.has(id)) levels.set(id, 0);
-  const rows = new Map<number, string[]>();
-  for (const id of ids) {
-    const level = levels.get(id) ?? 0;
-    rows.set(level, [...(rows.get(level) ?? []), id]);
-  }
-
-  const sizes = new Map(ids.map((id) => [id, importedBoxSize(nodes.get(id) ?? id)]));
-  const rowHeights = new Map([...rows].map(([level, row]) => [level, Math.max(...row.map((id) => sizes.get(id)?.h ?? BOX_H))]));
-  const sortedLevels = [...rows.keys()].sort((a, b) => a - b);
+  /* One column, one box to a row. Every box is given the same width — the widest label's, so
+     nothing is wrapped that need not be — which puts every left edge, every right edge and every
+     centre on one line down the sheet. That last one is what the arrows are drawn between, so
+     they run straight down rather than leaning off to whichever box happened to be wider. A chart
+     laid out in rows has to guess which branch belongs above which; a column does not guess, and
+     what it costs is only that an arrow which skips a box passes behind the boxes between. */
+  const w = order.length ? Math.max(...order.map((id) => importedBoxWidth(nodes.get(id) ?? id))) : BOX_W;
   let y = PAD;
-  const rowY = new Map<number, number>();
-  for (const level of sortedLevels) {
-    rowY.set(level, y);
-    y += (rowHeights.get(level) ?? BOX_H) + GAP;
-  }
-
-  const boxes: Box[] = ids.map((id, idIndex) => {
-    const level = levels.get(id) ?? 0;
-    const row = rows.get(level) ?? [];
-    let x = PAD;
-    for (const previous of row.slice(0, row.indexOf(id))) {
-      x += (sizes.get(previous)?.w ?? BOX_W) + GAP * 2;
-    }
-    const size = sizes.get(id) ?? { w: BOX_W, h: BOX_H };
-    return {
-      id: `b${idIndex + 1}`,
-      x,
-      y: rowY.get(level) ?? PAD,
-      w: size.w,
-      h: size.h,
-      text: nodes.get(id) ?? id,
-    };
+  const boxes: Box[] = order.map((id, index) => {
+    const text = nodes.get(id) ?? id;
+    const h = importedBoxHeight(text, w);
+    const box = { id: `b${index + 1}`, x: PAD, y, w, h, text };
+    y += h + GAP;
+    return box;
   });
-  const idMap = new Map(ids.map((id, index) => [id, boxes[index].id]));
+
+  const idMap = new Map(order.map((id, index) => [id, boxes[index].id]));
   const arrows: Arrow[] = edges.flatMap((edge, index) => {
     const from = idMap.get(edge.from);
     const to = idMap.get(edge.to);
