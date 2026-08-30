@@ -41,9 +41,9 @@ export const config = {
         {
           key: { en: "Tab", ja: "Tab", zh: "Tab" },
           value: {
-            en: "Adds the next box and draws an arrow from the selected one, so a chain is typed rather than drawn",
-            ja: "次のボックスを追加し、選択中のボックスから矢印を引きます。描かずに打って繋げられます",
-            zh: "添加下一个方框并从选中方框引出箭头，链条可以打字而非绘制",
+            en: "Adds the next box and draws an arrow from the selected one, so a chain is built without the pointer; a new box is selected rather than opened, so it can be dragged straight away",
+            ja: "次のボックスを追加し、選択中のボックスから矢印を引きます。ポインタなしで連鎖を作れます。新しいボックスは選択されるだけで開かないため、すぐドラッグできます",
+            zh: "添加下一个方框并从选中方框引出箭头，无需指针即可连成链条；新方框只被选中而不进入编辑，因此可以立即拖动",
           },
         },
         {
@@ -52,6 +52,14 @@ export const config = {
             en: "N adds a box, D removes the selection (as Delete does), Enter edits the one selected box, Escape drops the selection",
             ja: "N でボックス追加、D で選択を削除（Delete と同じ）、Enter で選択中の1つを編集、Escape で選択解除",
             zh: "N 添加方框，D 删除所选（同 Delete），Enter 编辑选中的那一个，Escape 取消选择",
+          },
+        },
+        {
+          key: { en: "Undo and copy", ja: "元に戻す・コピー", zh: "撤销与复制" },
+          value: {
+            en: "Ctrl+Z undoes and Ctrl+Shift+Z redoes, even while a label is being typed; Ctrl+C copies the selected boxes with the arrows between them and Ctrl+V pastes them a little below, picked and ready to drag (Cmd on a Mac)",
+            ja: "Ctrl+Z で元に戻し、Ctrl+Shift+Z でやり直します。文字入力中でも効きます。Ctrl+C は選択中のボックスとその間の矢印をコピーし、Ctrl+V は少し下にずらして貼り付け、そのまま選択された状態でドラッグできます（Mac は Cmd）",
+            zh: "Ctrl+Z 撤销，Ctrl+Shift+Z 重做，输入文字时同样有效；Ctrl+C 复制选中的方框及其之间的箭头，Ctrl+V 稍向下偏移粘贴，粘贴后即为选中状态可直接拖动（Mac 用 Cmd）",
           },
         },
         {

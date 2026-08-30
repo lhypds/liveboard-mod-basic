@@ -74,6 +74,12 @@ const SLOP = 4;
 /** How far back Undo reaches, in edits. */
 const MAX_HISTORY = 100;
 
+/**
+ * How far down and right a pasted copy lands from what it was copied from. Two grid cells, so the
+ * copy sits clear of the original rather than exactly on top of it, and still on the grid.
+ */
+const PASTE_STEP = GRID * 2;
+
 /* The only ink on the card. Nothing here is marked by a second colour — see the selection rule in
    the stylesheet for what a picked box does instead. */
 const INK = "#0f172a";
@@ -191,6 +197,16 @@ type Resize = {
  * null in arrow mode, where the line follows the pointer until the second box is clicked.
  */
 type Link = { pointerId: number | null; from: string; x: number; y: number };
+
+/**
+ * What Ctrl+C last took: the picked boxes and whichever arrows had both ends among them. Held
+ * outside the component rather than in it, so a chart copied out of one card can be pasted into
+ * another — two of these cards share a board. Never saved; a reload starts with nothing copied.
+ */
+let clipboard: Chart | null = null;
+
+/** How many times that has been pasted, so a second paste does not land on top of the first. */
+let pasteCount = 0;
 
 // comp is free-form and can be hand-edited in the Edit modal, so nothing read out of it is trusted
 function isBox(value: unknown): value is Box {
@@ -644,12 +660,20 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
     persist(next);
   }
 
+  /**
+   * Both of these close whatever box was being typed into — a step back that left the caret in a
+   * label would be typing into a box that may no longer say what it did. The sheet takes the focus
+   * as that happens: the closed textarea was holding it, and focus dropped on the page body is
+   * focus this card's keys never see, so the Redo after an Undo would go nowhere. Undo pressed on
+   * the toolbar hands the focus over the same way, so the next one can be a key.
+   */
   function undo() {
     const previous = past[past.length - 1];
     if (!previous) return;
     setPast((prev) => prev.slice(0, -1));
     setFuture((prev) => [...prev, chart]);
     setEditing(null);
+    surfaceRef.current?.focus();
     persist(previous);
   }
 
@@ -659,6 +683,7 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
     setFuture((prev) => prev.slice(0, -1));
     setPast((prev) => [...prev, chart]);
     setEditing(null);
+    surfaceRef.current?.focus();
     persist(next);
   }
 
@@ -752,7 +777,64 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
       ? [...arrows, { id: nextId("a", new Set(arrows.map((a) => a.id))), from, to: box.id }]
       : arrows;
     edit({ boxes: [...boxes, box], arrows: nextArrows });
-    startEditing(box.id);
+    // Picked, but not opened for typing. A box lands where there was room for it rather than
+    // where it is wanted, so the first thing done to a new one is usually to drag it somewhere —
+    // and a caret sitting in it would take that first press as a click into its own text. Enter,
+    // or a double-click, opens it when there is something to write in it.
+    pickBox(box.id);
+    // The box that used to be opened for typing is what held the focus for the card's keys. With
+    // nothing opened, the sheet has to take it back — from the toolbar button that was just
+    // pressed, or from the textarea a Tab has just closed.
+    surfaceRef.current?.focus();
+  }
+
+  /**
+   * Ctrl+C. Arrows come along only where both of their ends do: one whose other end stayed behind
+   * would have nothing to point at once it was pasted.
+   */
+  function copySelected() {
+    if (selected?.kind !== "boxes" || !selected.ids.length) return;
+    const ids = new Set(selected.ids);
+    clipboard = {
+      boxes: boxes.filter((box) => ids.has(box.id)),
+      arrows: arrows.filter((arrow) => ids.has(arrow.from) && ids.has(arrow.to)),
+    };
+    pasteCount = 0;
+  }
+
+  /**
+   * Ctrl+V. The copies keep their places relative to one another and are shifted as one group, so
+   * a pasted chart is the same shape as the one it came from. They are picked as they land, which
+   * makes the paste the start of a drag: press one of them and the whole group moves off the
+   * original.
+   */
+  function paste() {
+    if (!clipboard?.boxes.length) return;
+    pasteCount += 1;
+    const shift = PASTE_STEP * pasteCount;
+
+    const takenBoxes = new Set(boxes.map((box) => box.id));
+    const idMap = new Map<string, string>();
+    const copies = clipboard.boxes.map((box) => {
+      const id = nextId("b", takenBoxes);
+      takenBoxes.add(id);
+      idMap.set(box.id, id);
+      return { ...box, id, x: Math.max(0, snap(box.x + shift)), y: Math.max(0, snap(box.y + shift)) };
+    });
+
+    const takenArrows = new Set(arrows.map((arrow) => arrow.id));
+    const copiedArrows = clipboard.arrows.flatMap((arrow) => {
+      const from = idMap.get(arrow.from);
+      const to = idMap.get(arrow.to);
+      if (!from || !to) return [];
+      const id = nextId("a", takenArrows);
+      takenArrows.add(id);
+      return [{ id, from, to }];
+    });
+
+    edit({ boxes: [...boxes, ...copies], arrows: [...arrows, ...copiedArrows] });
+    setSelected({ kind: "boxes", ids: copies.map((box) => box.id) });
+    setEditing(null);
   }
 
   /** The toolbar's Add: at the top-left of whatever part of the chart the card is showing. */
@@ -1071,8 +1153,37 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    // Ctrl on a keyboard, Cmd on a Mac: the same key to the hand pressing it
+    const mod = (e.ctrlKey || e.metaKey) && !e.altKey;
+
+    // Undo and Redo are taken even while a label is being typed, which is why they come before the
+    // guard below. A label is on the chart's own history like everything else, and the textarea it
+    // is typed into is a controlled one, so the undo the browser would otherwise do there is
+    // against a value React puts straight back.
+    if (mod && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      if (e.shiftKey) redo();
+      else undo();
+      return;
+    }
+
     // Keys typed into a box bubble up here; that box's own handler has already had them
     if (editing) return;
+
+    if (mod && !e.shiftKey && e.key.toLowerCase() === "c") {
+      // Nothing picked leaves the press to the browser, so a copy of a label selected elsewhere on
+      // the page is still a copy
+      if (selected?.kind !== "boxes") return;
+      e.preventDefault();
+      copySelected();
+      return;
+    }
+    if (mod && !e.shiftKey && e.key.toLowerCase() === "v") {
+      if (!clipboard?.boxes.length) return;
+      e.preventDefault();
+      paste();
+      return;
+    }
 
     // The letter shortcuts are bare letters only: Cmd+N opens a browser window and Ctrl+D bookmarks
     // the page, and neither of those is this card's to take
