@@ -399,7 +399,7 @@ function orderNodes(ids: string[], edges: Array<{ from: string; to: string }>): 
   let last: string | null = null;
 
   while (ready.size) {
-    const next =
+    const next: string =
       (last && (outgoing.get(last) ?? []).find((id) => ready.has(id))) ||
       [...ready].reduce((best, id) => ((rank.get(id) ?? 0) < (rank.get(best) ?? 0) ? id : best));
     ready.delete(next);
