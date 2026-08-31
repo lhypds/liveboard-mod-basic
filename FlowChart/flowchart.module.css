@@ -185,15 +185,21 @@
   overflow: visible;
 }
 
+/* An arrow is a path with corners in it, so this has to say `fill: none`: `pointer-events` decides
+   what the shape catches, not what it paints, and a path left to fill would ink in the whole
+   region its turns enclose */
 .hit {
+  fill: none;
   stroke: transparent;
   stroke-width: 12px;
   pointer-events: stroke;
   cursor: pointer;
 }
 
-/* The arrow being drawn: dashed, which is what says it is not there yet — the finished ones are
-   solid, and neither of them needs a colour to tell them apart */
+/* The arrow being drawn: broken, which is what says it is not there yet. A finished arrow can be
+   dashed too, and is drawn with a longer dash (DASH in the render) — but this one is only on
+   screen while a pointer is down, and it is the one straight line left on a chart of square
+   corners, so the two are never taken for each other. Neither needs a colour to say what it is. */
 .live {
   stroke: #0f172a;
   stroke-width: 1px;

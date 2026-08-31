@@ -7,6 +7,7 @@ type Lang = "en" | "ja" | "zh";
 type Strings = {
   box: string;
   arrow: string;
+  dash: string;
   importMermaid: string;
   exportMermaid: string;
   undo: string;
@@ -19,6 +20,7 @@ const STRINGS: Record<Lang, Strings> = {
   en: {
     box: "Add box",
     arrow: "Draw arrow",
+    dash: "Dashed arrow",
     importMermaid: "Import",
     exportMermaid: "Export",
     undo: "Undo",
@@ -29,6 +31,7 @@ const STRINGS: Record<Lang, Strings> = {
   ja: {
     box: "ボックス追加",
     arrow: "矢印を引く",
+    dash: "破線の矢印",
     importMermaid: "インポート",
     exportMermaid: "エクスポート",
     undo: "元に戻す",
@@ -39,6 +42,7 @@ const STRINGS: Record<Lang, Strings> = {
   zh: {
     box: "添加方框",
     arrow: "画箭头",
+    dash: "虚线箭头",
     importMermaid: "导入",
     exportMermaid: "导出",
     undo: "撤销",
@@ -93,6 +97,26 @@ const INK = "#0f172a";
  */
 const PICKED_STROKE = 1.5;
 
+/**
+ * How far back from a turn a wire starts rounding it. Small against the gap between two boxes, so
+ * a corner reads as a corner that has been eased rather than as a curve.
+ */
+const ELBOW = 8;
+
+/**
+ * How far past a box a wire is taken before it turns, in the one case where there is no room
+ * between the two boxes to turn in — see {@link route}.
+ */
+const STUB = 20;
+
+/**
+ * The dash a dashed arrow is drawn with. Longer than the one the arrow being dragged out is drawn
+ * with (`.live` in the stylesheet), which is the only other broken line on the sheet: the two mean
+ * quite different things — one is a weaker link, the other is a link that is not there yet — and
+ * the second is only ever on screen while a pointer is down, so they are never side by side.
+ */
+const DASH = "6 4";
+
 /** Where a box's four link handles sit, as percentages of its own box. */
 const PORTS = [
   { k: "t", x: 50, y: 0 },
@@ -119,8 +143,12 @@ const MIN_H = 30;
 /** One box on the chart, as it is kept in the card's config. See `config.ts`. */
 type Box = { id: string; x: number; y: number; w: number; h: number; text: string };
 
-/** One arrow, named by the boxes at its two ends. Never by coordinates — see `config.ts`. */
-type Arrow = { id: string; from: string; to: string };
+/**
+ * One arrow, named by the boxes at its two ends. Never by coordinates — see `config.ts`. `dashed`
+ * is left off a solid arrow rather than written false: most arrows on a chart are solid, and every
+ * one of them rides along in every board save.
+ */
+type Arrow = { id: string; from: string; to: string; dashed?: boolean };
 
 type Chart = { boxes: Box[]; arrows: Arrow[] };
 
@@ -142,7 +170,7 @@ type GenerateTarget = {
 };
 
 const GENERATE_PROMPT =
-  "Generate Mermaid flowchart code for this Flow Chart card. Return only a complete Mermaid flowchart or graph definition, no markdown fences or explanation. Use readable node labels and directed arrows. Preserve any useful existing Mermaid structure unless the instruction asks to replace it.";
+  "Generate Mermaid flowchart code for this Flow Chart card. Return only a complete Mermaid flowchart or graph definition, no markdown fences or explanation. Use readable node labels and directed arrows: --> for a plain link, and -.-> for one that is optional, conditional or otherwise weaker. Preserve any useful existing Mermaid structure unless the instruction asks to replace it.";
 
 /**
  * What the toolbar's Delete and the Delete key act on. Boxes come as a list because a marquee
@@ -220,6 +248,7 @@ function isBox(value: unknown): value is Box {
 function isArrow(value: unknown): value is Arrow {
   const arrow = value as Arrow | null;
   if (!arrow || typeof arrow !== "object") return false;
+  if (arrow.dashed !== undefined && typeof arrow.dashed !== "boolean") return false;
   return typeof arrow.id === "string" && !!arrow.id && typeof arrow.from === "string" && typeof arrow.to === "string";
 }
 
@@ -256,9 +285,10 @@ function center(box: Box): Point {
 }
 
 /**
- * Where the line from the box's centre towards `to` crosses the box's own border. This is the
- * whole of the arrow routing: both ends are worked out from the boxes every time the chart is
- * drawn, so a box that moves drags its arrows along without any of them being touched.
+ * Where the line from the box's centre towards `to` crosses the box's own border. Used by the
+ * arrow being dragged out of a handle, which has a pointer at its far end rather than a second
+ * box, and so has no sides to square itself up against — the finished arrows are routed by
+ * {@link route}.
  */
 function border(box: Box, to: Point): Point {
   const from = center(box);
@@ -270,6 +300,118 @@ function border(box: Box, to: Point): Point {
   const toEnd = dy === 0 ? Infinity : box.h / 2 / Math.abs(dy);
   const scale = Math.min(toSide, toEnd);
   return { x: from.x + dx * scale, y: from.y + dy * scale };
+}
+
+/**
+ * The corners an arrow turns on its way from one box's border to the other's. Every segment runs
+ * along an axis, so a chart of them reads as wiring rather than as string pulled taut between
+ * centres — and two boxes in a column are joined by a line straight down instead of one leaning
+ * off to whichever of them is wider.
+ *
+ * Which sides it leaves and enters by is decided by where the air between the two boxes is: a box
+ * with clear space under it is left by the bottom and entered by the top, and the turn is made
+ * half way down that space, where it is furthest from both. Ties go to the vertical, which is the
+ * way a flowchart is read. This is worked out from the boxes every time the chart is drawn, so a
+ * box that moves drags its arrows along — and re-routes them — without any of them being touched.
+ */
+function route(from: Box, to: Box): Point[] {
+  const a = center(from);
+  const b = center(to);
+  const down = b.y >= a.y;
+  const right = b.x >= a.x;
+  // The space between the two facing edges, on the side the target actually lies. Negative where
+  // the boxes overlap on that axis, which is what rules the axis out.
+  const vGap = down ? to.y - (from.y + from.h) : from.y - (to.y + to.h);
+  const hGap = right ? to.x - (from.x + from.w) : from.x - (to.x + to.w);
+
+  if (vGap > 0 && vGap >= hGap) {
+    const y0 = down ? from.y + from.h : from.y;
+    const y1 = down ? to.y : to.y + to.h;
+    const mid = (y0 + y1) / 2;
+    return [
+      { x: a.x, y: y0 },
+      { x: a.x, y: mid },
+      { x: b.x, y: mid },
+      { x: b.x, y: y1 },
+    ];
+  }
+
+  if (hGap > 0) {
+    const x0 = right ? from.x + from.w : from.x;
+    const x1 = right ? to.x : to.x + to.w;
+    const mid = (x0 + x1) / 2;
+    return [
+      { x: x0, y: a.y },
+      { x: mid, y: a.y },
+      { x: mid, y: b.y },
+      { x: x1, y: b.y },
+    ];
+  }
+
+  // Overlapping, or touching: there is no air between the pair of them to turn in, so the wire is
+  // taken out past both on the side the target leans to and brought back in on that same side of
+  // it. Never a zero-length turn, whatever the two boxes are doing to each other.
+  const x0 = right ? from.x + from.w : from.x;
+  const x1 = right ? to.x + to.w : to.x;
+  const out = right ? Math.max(x0, x1) + STUB : Math.min(x0, x1) - STUB;
+  return [
+    { x: x0, y: a.y },
+    { x: out, y: a.y },
+    { x: out, y: b.y },
+    { x: x1, y: b.y },
+  ];
+}
+
+/** Whether two of a route's corners are near enough to the same place to be one corner. */
+function same(a: number, b: number): boolean {
+  return Math.abs(a - b) < 0.01;
+}
+
+/**
+ * The route with the corners that are not corners taken out: the ones a box's centre lining up
+ * with the other's collapses onto each other, and the ones left sitting in the middle of a
+ * straight run. Both would otherwise be rounded by {@link elbowPath} as if they were turns, which
+ * puts a dent in a line that never leaves its axis.
+ */
+function corners(points: Point[]): Point[] {
+  const out: Point[] = [];
+  for (const point of points) {
+    const last = out[out.length - 1];
+    if (last && same(last.x, point.x) && same(last.y, point.y)) continue;
+    out.push(point);
+  }
+  for (let i = out.length - 2; i >= 1; i--) {
+    const [before, at, after] = [out[i - 1], out[i], out[i + 1]];
+    const straight = (same(before.x, at.x) && same(at.x, after.x)) || (same(before.y, at.y) && same(at.y, after.y));
+    if (straight) out.splice(i, 1);
+  }
+  return out;
+}
+
+/**
+ * The route as an SVG path, each turn eased into a quarter-circle of radius `r`. The radius is cut
+ * down to half of the shorter of the two segments meeting at the turn, so a corner between two
+ * short segments rounds by as much as there is room for rather than overrunning the next one.
+ */
+function elbowPath(points: Point[], r: number): string {
+  if (points.length < 2) return "";
+  let d = `M${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length - 1; i++) {
+    const [before, at, after] = [points[i - 1], points[i], points[i + 1]];
+    const inLen = Math.hypot(at.x - before.x, at.y - before.y);
+    const outLen = Math.hypot(after.x - at.x, after.y - at.y);
+    const cut = Math.min(r, inLen / 2, outLen / 2);
+    // Under half a pixel there is nothing to see in the curve, and its control point is the corner
+    if (cut < 0.5) {
+      d += `L${at.x} ${at.y}`;
+      continue;
+    }
+    const from = { x: at.x + ((before.x - at.x) / inLen) * cut, y: at.y + ((before.y - at.y) / inLen) * cut };
+    const to = { x: at.x + ((after.x - at.x) / outLen) * cut, y: at.y + ((after.y - at.y) / outLen) * cut };
+    d += `L${from.x} ${from.y}Q${at.x} ${at.y} ${to.x} ${to.y}`;
+  }
+  const last = points[points.length - 1];
+  return `${d}L${last.x} ${last.y}`;
 }
 
 function hits(box: Box, x: number, y: number): boolean {
@@ -433,20 +575,24 @@ function readMermaidNode(raw: string): { id: string; text?: string } | null {
 
 function chartFromMermaid(source: string): Chart {
   const nodes = new Map<string, string>();
-  const edges: Array<{ from: string; to: string }> = [];
+  const edges: Array<{ from: string; to: string; dashed: boolean }> = [];
 
   for (const rawLine of source.split(/\r?\n/)) {
     const line = rawLine.replace(/%%.*$/, "").trim();
     if (!line || /^(flowchart|graph)\b/i.test(line)) continue;
 
-    const edge = line.match(/^(.*?)\s*(?:-->|---|==>|-.->)\s*(.*?)$/);
+    // The link itself is captured rather than skipped over: Mermaid's dotted forms are the ones
+    // with a stop in them, and they are what a dashed arrow on this card is written as
+    const edge = line.match(/^(.*?)\s*(-\.+->|-\.+-|-{2,}>|-{3,}|={2,}>|={3,})\s*(.*?)$/);
     if (edge) {
       const from = readMermaidNode(edge[1]);
-      const to = readMermaidNode(edge[2]);
+      const to = readMermaidNode(edge[3]);
       if (!from || !to || from.id === to.id) continue;
       nodes.set(from.id, cleanMermaidLabel(from.text ?? nodes.get(from.id) ?? from.id));
       nodes.set(to.id, cleanMermaidLabel(to.text ?? nodes.get(to.id) ?? to.id));
-      if (!edges.some((item) => item.from === from.id && item.to === to.id)) edges.push({ from: from.id, to: to.id });
+      if (!edges.some((item) => item.from === from.id && item.to === to.id)) {
+        edges.push({ from: from.id, to: to.id, dashed: edge[2].includes(".") });
+      }
       continue;
     }
 
@@ -476,7 +622,8 @@ function chartFromMermaid(source: string): Chart {
   const arrows: Arrow[] = edges.flatMap((edge, index) => {
     const from = idMap.get(edge.from);
     const to = idMap.get(edge.to);
-    return from && to ? [{ id: `a${index + 1}`, from, to }] : [];
+    if (!from || !to) return [];
+    return [{ id: `a${index + 1}`, from, to, ...(edge.dashed ? { dashed: true } : {}) }];
   });
 
   return { boxes, arrows };
@@ -496,7 +643,7 @@ function chartToMermaid(chart: Chart): string {
   for (const arrow of chart.arrows) {
     const from = ids.get(arrow.from);
     const to = ids.get(arrow.to);
-    if (from && to) lines.push(`  ${from} --> ${to}`);
+    if (from && to) lines.push(`  ${from} ${arrow.dashed ? "-.->" : "-->"} ${to}`);
   }
   return `${lines.join("\n")}\n`;
 }
@@ -756,6 +903,9 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
   /** The one picked box, or nothing when a marquee has picked several — see {@link addNext}. */
   const onlyPicked = picked.length === 1 ? boxes.find((box) => box.id === picked[0]) : undefined;
 
+  /** The picked arrow, when what is picked is an arrow. Only ever one — see {@link Selection}. */
+  const pickedArrow = selected?.kind === "arrow" ? arrows.find((arrow) => arrow.id === selected.id) : undefined;
+
   function pickBox(id: string) {
     setSelected({ kind: "boxes", ids: [id] });
   }
@@ -829,7 +979,8 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
       if (!from || !to) return [];
       const id = nextId("a", takenArrows);
       takenArrows.add(id);
-      return [{ id, from, to }];
+      // Spread first, so a dashed arrow is still dashed where the copy lands
+      return [{ ...arrow, id, from, to }];
     });
 
     edit({ boxes: [...boxes, ...copies], arrows: [...arrows, ...copiedArrows] });
@@ -861,6 +1012,28 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
     if (from === to) return;
     if (arrows.some((arrow) => arrow.from === from && arrow.to === to)) return;
     edit({ boxes, arrows: [...arrows, { id: nextId("a", new Set(arrows.map((a) => a.id))), from, to }] });
+  }
+
+  /**
+   * Solid to dashed and back, on the picked arrow. A property of the arrow rather than a mode the
+   * next one is drawn in: which links on a chart are the weaker ones is usually only settled once
+   * they are all down and the shape of the thing can be seen.
+   */
+  function toggleDash() {
+    if (!pickedArrow) return;
+    edit({
+      boxes,
+      arrows: arrows.map((arrow) => {
+        if (arrow.id !== pickedArrow.id) return arrow;
+        if (!arrow.dashed) return { ...arrow, dashed: true };
+        // Off is the flag gone, not the flag written false — see the note on Arrow
+        const solid = { ...arrow };
+        delete solid.dashed;
+        return solid;
+      }),
+    });
+    // The press took the focus off the sheet, and the sheet is what the card's keys are read on
+    surfaceRef.current?.focus();
   }
 
   function removeSelected() {
@@ -1057,7 +1230,7 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
     });
   }
 
-  function handleArrowPointerDown(e: React.PointerEvent<SVGLineElement>, arrow: Arrow) {
+  function handleArrowPointerDown(e: React.PointerEvent<SVGPathElement>, arrow: Arrow) {
     e.stopPropagation();
     setSelected({ kind: "arrow", id: arrow.id });
     setEditing(null);
@@ -1294,6 +1467,24 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
               <path d="M13 7l5 5-5 5" />
             </svg>
           </button>
+          {/* Beside the arrow tool, because it is about arrows — but it acts on the picked one
+              rather than arming a mode, so it is dark when that arrow is dashed and dead when
+              there is no arrow picked to dash */}
+          <button
+            type="button"
+            className={styles.button}
+            title={strings.dash}
+            aria-label={strings.dash}
+            aria-pressed={!!pickedArrow?.dashed}
+            data-active={pickedArrow?.dashed ? "" : undefined}
+            disabled={!pickedArrow}
+            onClick={toggleDash}
+          >
+            <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 12h14" strokeDasharray="4 3" />
+              <path d="M13 7l5 5-5 5" />
+            </svg>
+          </button>
         </div>
 
         <div className={styles.spacer} />
@@ -1434,30 +1625,21 @@ export default function FlowChart({ config }: { config: Record<string, unknown> 
               const from = byId.get(arrow.from);
               const to = byId.get(arrow.to);
               if (!from || !to) return null;
-              const tail = border(from, center(to));
-              const tip = border(to, center(from));
+              const d = elbowPath(corners(route(from, to)), ELBOW);
               const on = selected?.kind === "arrow" && selected.id === arrow.id;
               return (
                 <g key={arrow.id}>
-                  <line
-                    x1={tail.x}
-                    y1={tail.y}
-                    x2={tip.x}
-                    y2={tip.y}
+                  <path
+                    d={d}
+                    fill="none"
                     stroke={INK}
                     strokeWidth={on ? PICKED_STROKE : 1}
+                    strokeDasharray={arrow.dashed ? DASH : undefined}
                     markerEnd={`url(#${head})`}
                   />
                   {/* Fat, invisible, and the only part of the arrow a pointer can reach: a
                       hairline is far too thin to press, on a mouse and more so on a finger */}
-                  <line
-                    x1={tail.x}
-                    y1={tail.y}
-                    x2={tip.x}
-                    y2={tip.y}
-                    className={styles.hit}
-                    onPointerDown={(e) => handleArrowPointerDown(e, arrow)}
-                  />
+                  <path d={d} className={styles.hit} onPointerDown={(e) => handleArrowPointerDown(e, arrow)} />
                 </g>
               );
             })}
