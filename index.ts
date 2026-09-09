@@ -5,6 +5,7 @@ import * as Note from "./Note";
 import * as Weather from "./Weather";
 import * as Chat from "./Chat";
 import * as Code from "./Code";
+import * as Compare from "./Compare";
 import * as Calendar from "./Calendar";
 import * as Clock from "./Clock";
 import * as Map from "./Map";
@@ -44,6 +45,7 @@ const avaliableModules: Record<string, ModuleEntry> = {
   Weather: { component: Weather.default, config: Weather.config },
   Chat: { component: Chat.default, config: Chat.config },
   Code: { component: Code.default, config: Code.config },
+  Compare: { component: Compare.default, config: Compare.config },
   Calendar: { component: Calendar.default, config: Calendar.config },
   Clock: { component: Clock.default, config: Clock.config },
   Map: { component: Map.default, config: Map.config },
@@ -54,8 +56,12 @@ const avaliableModules: Record<string, ModuleEntry> = {
   X: { component: X.default, config: X.config },
 };
 
+// Accept both the original flat config and the grouped Basic config.
+const rawConfig: Record<string, unknown> = moduleConfig;
+const group = rawConfig.comp_set as { mods?: Record<string, { enabled?: boolean }> } | undefined;
+const settings = (group?.mods ?? rawConfig) as Record<string, { enabled?: boolean }>;
 const modules: Record<string, ModuleEntry> = Object.fromEntries(
-  Object.entries(avaliableModules).filter(([key]) => moduleConfig[key as keyof typeof moduleConfig]?.enabled !== false),
+  Object.entries(avaliableModules).filter(([key]) => settings[key]?.enabled !== false),
 );
 
 export default modules;

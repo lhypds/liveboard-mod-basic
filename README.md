@@ -33,6 +33,13 @@ Editor and runner for HTML, JavaScript, JSON and Python, with Prism highlighting
 JavaScript and Python (Pyodide) run in Web Workers, HTML renders in a sandboxed iframe, JSON is shown as data — no DOM and no network in either worker.  
 Mode per language: Console (JS, Python), Python Interpreter, HTML Preview, JSON View.  
 
+`Compare`
+
+Drop or choose UTF-8 code/text files on the left and right, or paste and edit text directly.
+The center shows a line diff with line numbers, light green additions and light red deletions.
+Files stay in the browser tab and are cleared on reload. Each side supports up to 512 KB and 5,000 lines;
+very large change sets ask you to compare smaller sections. CRLF/LF differences are ignored, while final newline changes are shown.
+
 `Calendar`
 
 Compact month calendar with localized labels, date selection, month navigation and configurable Sunday/Monday week starts.
