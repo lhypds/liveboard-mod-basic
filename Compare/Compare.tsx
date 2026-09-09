@@ -116,7 +116,7 @@ function SourcePane({ side, source, onChange, labels }: {
       </header>
       <div className={styles.fileBar}>
         <button type="button" onClick={() => input.current?.click()}>{labels.browse}</button>
-        <span title={source?.name}>{source?.name ?? "—"}</span>
+        {source?.name && <span title={source.name}>{source.name}</span>}
         <input ref={input} type="file" hidden aria-label={`${labels.browse}: ${labels[side]}`} onChange={(event) => {
           if (event.target.files?.length) void readFiles(event.target.files);
           event.target.value = "";
