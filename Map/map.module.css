@@ -159,6 +159,12 @@
   display: none;
 }
 
+/* One Mapbox credit per card: the bottom-right attribution carries it, so the
+   bottom-left wordmark is just a second copy taking up map */
+.wrapper :global(.mapboxgl-ctrl-logo) {
+  display: none;
+}
+
 .poi {
   min-width: 80px;
   max-width: 200px;
