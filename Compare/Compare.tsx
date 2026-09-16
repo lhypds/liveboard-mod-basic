@@ -6,8 +6,8 @@ import styles from "./compare.module.css";
 type Source = { name: string; text: string };
 type Locale = "en" | "ja" | "zh";
 const strings = {
-  left: { en: "Left · Original", ja: "左 · 元の内容", zh: "左侧 · 原文" },
-  right: { en: "Right · Updated", ja: "右 · 変更後", zh: "右侧 · 修改后" },
+  left: { en: "Left · Source", ja: "左 · ソース", zh: "左侧 · 源" },
+  right: { en: "Right · Target", ja: "右 · ターゲット", zh: "右侧 · 目标" },
   result: { en: "Result", ja: "比較結果", zh: "比较结果" },
   browse: { en: "Choose file", ja: "ファイルを選択", zh: "选择文件" },
   clear: { en: "Clear", ja: "クリア", zh: "清空" },
