@@ -42,10 +42,11 @@ very large change sets ask you to compare smaller sections. CRLF/LF differences 
 
 `Decision`
 
-Weighs one or more options against each other as a table: one column per option, one row per dimension, and a conclusion for each dimension in the last column, with the overall conclusion under the table.
+Weighs one or more options against each other as a table: one column per option, one row per dimension, then an analysis and a conclusion for each dimension in the last two columns.
+Under the table comes the overall analysis, then the overall conclusion; the two share the rest of the card, the analysis twice as tall as the conclusion.
 Every cell grows with what is typed into it; the dimension column stays in view while a table with many options scrolls sideways.
 Removing an option takes its column with it, so a row or column with anything typed in it asks first — there is no undo for it. The last option stays: one is enough to weigh a single choice on its own.
-The sheet is kept in `comp` (`question`, `options`, `rows` with their `cells` keyed by option id, `conclusion`), and ids are short and sequential (`o1`, `r1`) since they ride along in every board save.
+The sheet is kept in `comp` (`question`, `analysis`, `options`, `rows` with their `cells` keyed by option id plus `analysis` and `conclusion`, `conclusion`), and ids are short and sequential (`o1`, `r1`) since they ride along in every board save.
 
 `Calendar`
 

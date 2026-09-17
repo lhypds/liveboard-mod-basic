@@ -106,7 +106,7 @@
 
 .table th:focus-within,
 .table td:focus-within,
-.overall:focus-within {
+.box:focus-within {
   background: #f5f5f5;
 }
 
@@ -198,21 +198,42 @@
   color: inherit;
 }
 
-/* Takes whatever height the table leaves, down to the foot of the card, and all of it is the box
-   to type in. Once the table outgrows the card it keeps its minimum and scrolls with the rest. */
-.overall {
-  flex: 1 0 auto;
+/* Overall analysis and overall conclusion, in that order under the table */
+.box {
   display: flex;
   flex-direction: column;
   border: 1px solid #000;
   background: #fff;
 }
 
-.overall > .label {
+/* A fixed line, so each box's height is known from its field's: 1px border, 22px label, the field,
+   1px border */
+.box > .label {
   padding: 8px 8px 0;
+  line-height: 14px;
+}
+
+.box .field {
+  flex: 1 0 auto;
+}
+
+/* Between them they take whatever height the table leaves, down to the foot of the card, the
+   analysis twice as tall as the conclusion. Both grow from nothing rather than from their text, so
+   the 2:1 holds exactly, and their minimums are 2:1 as well (152px and 76px), so it still holds once
+   the table outgrows the card and they scroll with the rest. Only text longer than a box stretches
+   it past its share. */
+.analysis {
+  flex: 2 0 0px;
+}
+
+.analysis .field {
+  min-height: 128px;
+}
+
+.overall {
+  flex: 1 0 0px;
 }
 
 .overall .field {
-  flex: 1 0 auto;
   min-height: 52px;
 }

@@ -8,7 +8,9 @@ const strings = {
   question: { en: "What is being decided?", ja: "何を決めますか？", zh: "要决定什么？" },
   dimension: { en: "Dimension", ja: "比較軸", zh: "维度" },
   option: { en: "Option", ja: "選択肢", zh: "选项" },
+  analysis: { en: "Analysis", ja: "分析", zh: "分析" },
   conclusion: { en: "Conclusion", ja: "結論", zh: "结论" },
+  overallAnalysis: { en: "Overall analysis", ja: "総合分析", zh: "总分析" },
   overall: { en: "Overall conclusion", ja: "総合結論", zh: "总结论" },
   addOption: { en: "+ Option", ja: "+ 選択肢", zh: "+ 选项" },
   addDimension: { en: "+ Dimension", ja: "+ 比較軸", zh: "+ 维度" },
@@ -29,8 +31,8 @@ const strings = {
 type Labels = { [K in keyof typeof strings]: string };
 
 type Option = { id: string; name: string };
-type Row = { id: string; dimension: string; cells: Record<string, string>; conclusion: string };
-type Sheet = { question: string; options: Option[]; rows: Row[]; conclusion: string };
+type Row = { id: string; dimension: string; cells: Record<string, string>; analysis: string; conclusion: string };
+type Sheet = { question: string; analysis: string; options: Option[]; rows: Row[]; conclusion: string };
 type Comp = Record<string, unknown> & { createdAt?: number; updatedAt?: number };
 type Removal = { kind: "option" | "row"; id: string };
 
@@ -38,6 +40,7 @@ type Removal = { kind: "option" | "row"; id: string };
    width the card has beyond that in the same proportions. More options scroll sideways. */
 const DIMENSION_PX = 120;
 const OPTION_PX = 120;
+const ANALYSIS_PX = 140;
 const CONCLUSION_PX = 140;
 
 function text(value: unknown): string {
@@ -71,11 +74,18 @@ function readSheet(comp: Comp | undefined): Sheet {
         dimension: text(r.dimension),
         // Only the cells of options still on the sheet, and only filled ones: an empty cell and a missing one read the same
         cells: Object.fromEntries(options.map((o) => [o.id, text(cells[o.id])]).filter(([, value]) => value)),
+        analysis: text(r.analysis),
         conclusion: text(r.conclusion),
       };
     }),
   );
-  return { question: text(comp?.question), options, rows, conclusion: text(comp?.conclusion) };
+  return {
+    question: text(comp?.question),
+    analysis: text(comp?.analysis),
+    options,
+    rows,
+    conclusion: text(comp?.conclusion),
+  };
 }
 
 /**
@@ -171,7 +181,7 @@ export default function Decision({ config }: { config: Record<string, unknown> }
   function addRow() {
     const id = nextId("r", sheet.rows.map((r) => r.id));
     focusRef.current = `dimension:${id}`;
-    write({ rows: [...sheet.rows, { id, dimension: "", cells: {}, conclusion: "" }] });
+    write({ rows: [...sheet.rows, { id, dimension: "", cells: {}, analysis: "", conclusion: "" }] });
   }
 
   function remove({ kind, id }: Removal) {
@@ -191,12 +201,12 @@ export default function Decision({ config }: { config: Record<string, unknown> }
     const texts =
       target.kind === "option"
         ? [sheet.options.find((o) => o.id === target.id)?.name, ...sheet.rows.map((r) => r.cells[target.id])]
-        : [row?.dimension, row?.conclusion, ...Object.values(row?.cells ?? {})];
+        : [row?.dimension, row?.analysis, row?.conclusion, ...Object.values(row?.cells ?? {})];
     if (texts.some((value) => value?.trim())) setRemoval(target);
     else remove(target);
   }
 
-  const widths = [DIMENSION_PX, ...sheet.options.map(() => OPTION_PX), CONCLUSION_PX];
+  const widths = [DIMENSION_PX, ...sheet.options.map(() => OPTION_PX), ANALYSIS_PX, CONCLUSION_PX];
   const tableWidth = widths.reduce((sum, width) => sum + width, 0);
 
   return (
@@ -245,53 +255,69 @@ export default function Decision({ config }: { config: Record<string, unknown> }
                   )}
                 </th>
               ))}
+              <th scope="col" className={styles.label}>{labels.analysis}</th>
               <th scope="col" className={styles.label}>{labels.conclusion}</th>
             </tr>
           </thead>
           <tbody>
-            {sheet.rows.map((row, index) => (
-              <tr key={row.id}>
-                <th scope="row" className={`${styles.dimension} ${styles.removable}`}>
-                  <Field
-                    field={`dimension:${row.id}`}
-                    value={row.dimension}
-                    placeholder={`${labels.dimension} ${index + 1}`}
-                    label={`${labels.dimension} ${index + 1}`}
-                    onChange={(dimension) => setRow(row.id, () => ({ dimension }))}
-                  />
-                  <button
-                    type="button"
-                    className={styles.remove}
-                    aria-label={labels.removeDimension}
-                    title={labels.removeDimension}
-                    onClick={() => requestRemove({ kind: "row", id: row.id })}
-                  >
-                    ×
-                  </button>
-                </th>
-                {sheet.options.map((option, column) => (
-                  <td key={option.id}>
+            {sheet.rows.map((row, index) => {
+              const rowName = row.dimension || `${labels.dimension} ${index + 1}`;
+              return (
+                <tr key={row.id}>
+                  <th scope="row" className={`${styles.dimension} ${styles.removable}`}>
                     <Field
-                      value={row.cells[option.id] ?? ""}
-                      label={`${row.dimension || `${labels.dimension} ${index + 1}`} · ${option.name || `${labels.option} ${column + 1}`}`}
-                      onChange={(value) => setRow(row.id, (current) => ({ cells: { ...current.cells, [option.id]: value } }))}
+                      field={`dimension:${row.id}`}
+                      value={row.dimension}
+                      placeholder={`${labels.dimension} ${index + 1}`}
+                      label={`${labels.dimension} ${index + 1}`}
+                      onChange={(dimension) => setRow(row.id, () => ({ dimension }))}
+                    />
+                    <button
+                      type="button"
+                      className={styles.remove}
+                      aria-label={labels.removeDimension}
+                      title={labels.removeDimension}
+                      onClick={() => requestRemove({ kind: "row", id: row.id })}
+                    >
+                      ×
+                    </button>
+                  </th>
+                  {sheet.options.map((option, column) => (
+                    <td key={option.id}>
+                      <Field
+                        value={row.cells[option.id] ?? ""}
+                        label={`${rowName} · ${option.name || `${labels.option} ${column + 1}`}`}
+                        onChange={(value) => setRow(row.id, (current) => ({ cells: { ...current.cells, [option.id]: value } }))}
+                      />
+                    </td>
+                  ))}
+                  <td>
+                    <Field
+                      value={row.analysis}
+                      label={`${rowName} · ${labels.analysis}`}
+                      onChange={(analysis) => setRow(row.id, () => ({ analysis }))}
                     />
                   </td>
-                ))}
-                <td>
-                  <Field
-                    value={row.conclusion}
-                    label={`${row.dimension || `${labels.dimension} ${index + 1}`} · ${labels.conclusion}`}
-                    onChange={(conclusion) => setRow(row.id, () => ({ conclusion }))}
-                  />
-                </td>
-              </tr>
-            ))}
+                  <td>
+                    <Field
+                      value={row.conclusion}
+                      label={`${rowName} · ${labels.conclusion}`}
+                      onChange={(conclusion) => setRow(row.id, () => ({ conclusion }))}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
-      <section className={styles.overall}>
+      <section className={`${styles.box} ${styles.analysis}`}>
+        <span className={styles.label}>{labels.overallAnalysis}</span>
+        <Field value={sheet.analysis} label={labels.overallAnalysis} onChange={(analysis) => write({ analysis })} />
+      </section>
+
+      <section className={`${styles.box} ${styles.overall}`}>
         <span className={styles.label}>{labels.overall}</span>
         <Field
           value={sheet.conclusion}
