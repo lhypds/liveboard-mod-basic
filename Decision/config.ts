@@ -9,9 +9,9 @@ export const config = {
         {
           key: { en: "Options", ja: "選択肢", zh: "选项" },
           value: {
-            en: "The things being compared, one column each. One is enough to weigh a single choice on its own",
-            ja: "比較する対象を1列ずつ並べます。1つだけでも、その選択を単独で検討できます",
-            zh: "要比较的事物，每个一列。只有一个时也可以单独评估这个选择",
+            en: "The things being compared, one column each, with each one's pros and cons under its name. One is enough to weigh a single choice on its own",
+            ja: "比較する対象を1列ずつ並べ、名前の下にそれぞれの長所・短所を書きます。1つだけでも、その選択を単独で検討できます",
+            zh: "要比较的事物，每个一列，名称下方写各自的优缺点。只有一个时也可以单独评估这个选择",
           },
         },
         {
@@ -33,9 +33,9 @@ export const config = {
         {
           key: { en: "Generate", ja: "生成", zh: "生成" },
           value: {
-            en: "The Generate button in the header fills the sheet from the question through simple-ai (sign in to an SC account first). The same question improves what is written; a new one starts over, and Ctrl+Z brings the old sheet back. Cells under options are kept but not sent",
-            ja: "ヘッダーの生成ボタンで、質問から simple-ai が表を埋めます（先に SC アカウントにログイン）。同じ質問なら今の内容を改善し、違う質問なら作り直します。Ctrl+Z で元に戻せます。選択肢ごとのセルは残りますが送信されません",
-            zh: "标题栏的生成按钮通过 simple-ai 根据问题填写表格（需先登录 SC 账号）。问题不变时完善已有内容，换了问题则重新生成，Ctrl+Z 可恢复原表。选项下的单元格会保留，但不会发送",
+            en: "The Generate button in the header fills the sheet from the question through simple-ai (sign in to an SC account first). The same question improves what is written; a new one starts over, and Ctrl+Z brings the old sheet back. The cells rating each option on a dimension are kept but not sent",
+            ja: "ヘッダーの生成ボタンで、質問から simple-ai が表を埋めます（先に SC アカウントにログイン）。同じ質問なら今の内容を改善し、違う質問なら作り直します。Ctrl+Z で元に戻せます。比較軸ごとの選択肢のセルは残りますが送信されません",
+            zh: "标题栏的生成按钮通过 simple-ai 根据问题填写表格（需先登录 SC 账号）。问题不变时完善已有内容，换了问题则重新生成，Ctrl+Z 可恢复原表。各维度下选项的单元格会保留，但不会发送",
           },
         },
       ],
@@ -52,10 +52,10 @@ export const config = {
     question: "",
     // The overall analysis, under the table
     analysis: "",
-    // The things being compared, one column each: { id, name }
+    // The things being compared, one column each, with their pros and cons: { id, name, prosCons }
     options: [
-      { id: "o1", name: "" },
-      { id: "o2", name: "" },
+      { id: "o1", name: "", prosCons: "" },
+      { id: "o2", name: "", prosCons: "" },
     ],
     // One row per dimension: { id, dimension, cells: { [optionId]: text }, analysis, conclusion }
     rows: [

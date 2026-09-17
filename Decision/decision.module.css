@@ -141,6 +141,11 @@
   vertical-align: bottom;
 }
 
+/* A row's label sits level with the first line of its text, however long that runs */
+.table .prosCons th.label {
+  vertical-align: top;
+}
+
 .removable .field > textarea,
 .removable .field::after {
   padding-right: 20px;

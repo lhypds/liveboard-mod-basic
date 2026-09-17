@@ -9,6 +9,7 @@ const strings = {
   question: { en: "What is being decided?", ja: "何を決めますか？", zh: "要决定什么？" },
   dimension: { en: "Dimension", ja: "比較軸", zh: "维度" },
   option: { en: "Option", ja: "選択肢", zh: "选项" },
+  prosCons: { en: "Pros & cons", ja: "長所・短所", zh: "优缺点" },
   analysis: { en: "Analysis", ja: "分析", zh: "分析" },
   conclusion: { en: "Conclusion", ja: "結論", zh: "结论" },
   overallAnalysis: { en: "Overall analysis", ja: "総合分析", zh: "总分析" },
@@ -31,7 +32,7 @@ const strings = {
 } satisfies Record<string, Record<Locale, string>>;
 type Labels = { [K in keyof typeof strings]: string };
 
-type Option = { id: string; name: string };
+type Option = { id: string; name: string; prosCons: string };
 type Row = { id: string; dimension: string; cells: Record<string, string>; analysis: string; conclusion: string };
 type Sheet = { question: string; analysis: string; options: Option[]; rows: Row[]; conclusion: string };
 type Comp = Record<string, unknown> & { createdAt?: number; updatedAt?: number };
@@ -75,7 +76,9 @@ function uniqueById<T extends { id: string }>(items: T[]): T[] {
 // comp is free-form and can be hand-edited in the Edit modal, so nothing read out of it is trusted
 function readSheet(comp: Comp | undefined): Sheet {
   const options = uniqueById(
-    (Array.isArray(comp?.options) ? comp.options : []).filter(withId).map((o) => ({ id: o.id, name: text(o.name) })),
+    (Array.isArray(comp?.options) ? comp.options : [])
+      .filter(withId)
+      .map((o) => ({ id: o.id, name: text(o.name), prosCons: text(o.prosCons) })),
   );
   const rows = uniqueById(
     (Array.isArray(comp?.rows) ? comp.rows : []).filter(withId).map((r) => {
@@ -129,7 +132,7 @@ const EMPTY_SHEET: Sheet = { question: "", analysis: "", options: [], rows: [], 
 /** The sheet as simple-ai's decision endpoint takes a draft. It has no place for cells, so they stay home */
 function toDraft(sheet: Sheet): DecisionDraft {
   return {
-    options: sheet.options.map((option) => option.name),
+    options: sheet.options.map((option) => ({ name: option.name, advantages_disadvantages: option.prosCons })),
     dimensions: sheet.rows.map((row) => ({ name: row.dimension, analysis: row.analysis, conclusion: row.conclusion })),
     overall_analysis: sheet.analysis,
     overall_conclusion: sheet.conclusion,
@@ -139,7 +142,7 @@ function toDraft(sheet: Sheet): DecisionDraft {
 // The endpoint refuses a draft with nothing written in it
 function hasDraft(draft: DecisionDraft): boolean {
   return [
-    ...(draft.options ?? []),
+    ...(draft.options ?? []).flatMap((o) => [o.name, o.advantages_disadvantages]),
     ...(draft.dimensions ?? []).flatMap((d) => [d.name, d.analysis, d.conclusion]),
     draft.overall_analysis ?? "",
     draft.overall_conclusion ?? "",
@@ -170,7 +173,11 @@ function fill(base: Sheet, decision: Generated, question: string): Sheet {
   return {
     question,
     analysis: decision.overall_analysis,
-    options: pair(decision.options, base.options, (o) => o.name, "o").map(({ id }, i) => ({ id, name: decision.options[i] })),
+    options: pair(decision.options.map((o) => o.name), base.options, (o) => o.name, "o").map(({ id }, i) => ({
+      id,
+      name: decision.options[i].name,
+      prosCons: decision.options[i].advantages_disadvantages,
+    })),
     rows: pair(decision.dimensions.map((d) => d.name), base.rows, (r) => r.dimension, "r").map(({ id, from }, i) => ({
       id,
       dimension: decision.dimensions[i].name,
@@ -285,7 +292,7 @@ export default function Decision({ config }: { config: Record<string, unknown> }
   function addOption() {
     const id = nextId("o", sheet.options.map((o) => o.id));
     focusRef.current = `option:${id}`;
-    write({ options: [...sheet.options, { id, name: "" }] });
+    write({ options: [...sheet.options, { id, name: "", prosCons: "" }] });
   }
 
   function addRow() {
@@ -308,9 +315,10 @@ export default function Decision({ config }: { config: Record<string, unknown> }
   // There is no undo for a removed row or column, so one with anything typed in it asks first
   function requestRemove(target: Removal) {
     const row = sheet.rows.find((r) => r.id === target.id);
+    const option = sheet.options.find((o) => o.id === target.id);
     const texts =
       target.kind === "option"
-        ? [sheet.options.find((o) => o.id === target.id)?.name, ...sheet.rows.map((r) => r.cells[target.id])]
+        ? [option?.name, option?.prosCons, ...sheet.rows.map((r) => r.cells[target.id])]
         : [row?.dimension, row?.analysis, row?.conclusion, ...Object.values(row?.cells ?? {})];
     if (texts.some((value) => value?.trim())) setRemoval(target);
     else remove(target);
@@ -365,8 +373,23 @@ export default function Decision({ config }: { config: Record<string, unknown> }
                   )}
                 </th>
               ))}
-              <th scope="col" className={styles.label}>{labels.analysis}</th>
-              <th scope="col" className={styles.label}>{labels.conclusion}</th>
+              <th scope="col" rowSpan={2} className={styles.label}>{labels.analysis}</th>
+              <th scope="col" rowSpan={2} className={styles.label}>{labels.conclusion}</th>
+            </tr>
+            {/* Each option's own pros and cons, under its name */}
+            <tr className={styles.prosCons}>
+              <th scope="row" className={`${styles.dimension} ${styles.label}`}>{labels.prosCons}</th>
+              {sheet.options.map((option, index) => (
+                <td key={option.id}>
+                  <Field
+                    value={option.prosCons}
+                    label={`${option.name || `${labels.option} ${index + 1}`} · ${labels.prosCons}`}
+                    onChange={(prosCons) =>
+                      write({ options: sheet.options.map((o) => (o.id === option.id ? { ...o, prosCons } : o)) })
+                    }
+                  />
+                </td>
+              ))}
             </tr>
           </thead>
           <tbody>
