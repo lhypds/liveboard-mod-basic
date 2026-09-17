@@ -7,9 +7,9 @@ import styles from "./decision.module.css";
 type Locale = "en" | "ja" | "zh";
 const strings = {
   question: { en: "What is being decided?", ja: "何を決めますか？", zh: "要决定什么？" },
+  background: { en: "Background", ja: "背景", zh: "背景" },
   dimension: { en: "Dimension", ja: "比較軸", zh: "维度" },
   option: { en: "Option", ja: "選択肢", zh: "选项" },
-  prosCons: { en: "Pros & cons", ja: "長所・短所", zh: "优缺点" },
   analysis: { en: "Analysis", ja: "分析", zh: "分析" },
   conclusion: { en: "Conclusion", ja: "結論", zh: "结论" },
   overallAnalysis: { en: "Overall analysis", ja: "総合分析", zh: "总分析" },
@@ -32,9 +32,9 @@ const strings = {
 } satisfies Record<string, Record<Locale, string>>;
 type Labels = { [K in keyof typeof strings]: string };
 
-type Option = { id: string; name: string; prosCons: string };
+type Option = { id: string; name: string };
 type Row = { id: string; dimension: string; cells: Record<string, string>; analysis: string; conclusion: string };
-type Sheet = { question: string; analysis: string; options: Option[]; rows: Row[]; conclusion: string };
+type Sheet = { question: string; background: string; analysis: string; options: Option[]; rows: Row[]; conclusion: string };
 type Comp = Record<string, unknown> & { createdAt?: number; updatedAt?: number };
 type Removal = { kind: "option" | "row"; id: string };
 
@@ -76,9 +76,7 @@ function uniqueById<T extends { id: string }>(items: T[]): T[] {
 // comp is free-form and can be hand-edited in the Edit modal, so nothing read out of it is trusted
 function readSheet(comp: Comp | undefined): Sheet {
   const options = uniqueById(
-    (Array.isArray(comp?.options) ? comp.options : [])
-      .filter(withId)
-      .map((o) => ({ id: o.id, name: text(o.name), prosCons: text(o.prosCons) })),
+    (Array.isArray(comp?.options) ? comp.options : []).filter(withId).map((o) => ({ id: o.id, name: text(o.name) })),
   );
   const rows = uniqueById(
     (Array.isArray(comp?.rows) ? comp.rows : []).filter(withId).map((r) => {
@@ -95,6 +93,7 @@ function readSheet(comp: Comp | undefined): Sheet {
   );
   return {
     question: text(comp?.question),
+    background: text(comp?.background),
     analysis: text(comp?.analysis),
     options,
     rows,
@@ -127,13 +126,18 @@ function serialize(sheet: Sheet): string {
   return JSON.stringify(readSheet(sheet));
 }
 
-const EMPTY_SHEET: Sheet = { question: "", analysis: "", options: [], rows: [], conclusion: "" };
+const EMPTY_SHEET: Sheet = { question: "", background: "", analysis: "", options: [], rows: [], conclusion: "" };
 
-/** The sheet as simple-ai's decision endpoint takes a draft. It has no place for cells, so they stay home */
+/** The sheet as simple-ai's decision endpoint takes a draft: a row's cells are its options' pros and cons */
 function toDraft(sheet: Sheet): DecisionDraft {
   return {
-    options: sheet.options.map((option) => ({ name: option.name, advantages_disadvantages: option.prosCons })),
-    dimensions: sheet.rows.map((row) => ({ name: row.dimension, analysis: row.analysis, conclusion: row.conclusion })),
+    options: sheet.options.map((option) => option.name),
+    dimensions: sheet.rows.map((row) => ({
+      name: row.dimension,
+      options: sheet.options.map((option) => ({ name: option.name, pros_cons: row.cells[option.id] ?? "" })),
+      analysis: row.analysis,
+      conclusion: row.conclusion,
+    })),
     overall_analysis: sheet.analysis,
     overall_conclusion: sheet.conclusion,
   };
@@ -142,8 +146,8 @@ function toDraft(sheet: Sheet): DecisionDraft {
 // The endpoint refuses a draft with nothing written in it
 function hasDraft(draft: DecisionDraft): boolean {
   return [
-    ...(draft.options ?? []).flatMap((o) => [o.name, o.advantages_disadvantages]),
-    ...(draft.dimensions ?? []).flatMap((d) => [d.name, d.analysis, d.conclusion]),
+    ...(draft.options ?? []),
+    ...(draft.dimensions ?? []).flatMap((d) => [d.name, ...d.options.map((o) => o.pros_cons), d.analysis, d.conclusion]),
     draft.overall_analysis ?? "",
     draft.overall_conclusion ?? "",
   ].some((value) => value.trim());
@@ -169,22 +173,32 @@ function pair<T extends { id: string }>(names: string[], items: T[], nameOf: (it
 }
 
 /** A generated decision written over `base` — a column or row it leaves out goes */
-function fill(base: Sheet, decision: Generated, question: string): Sheet {
+function fill(base: Sheet, decision: Generated, question: string, background: string): Sheet {
+  const options = pair(decision.options, base.options, (o) => o.name, "o").map(({ id }, i) => ({
+    id,
+    name: decision.options[i],
+  }));
   return {
     question,
+    background,
     analysis: decision.overall_analysis,
-    options: pair(decision.options.map((o) => o.name), base.options, (o) => o.name, "o").map(({ id }, i) => ({
-      id,
-      name: decision.options[i].name,
-      prosCons: decision.options[i].advantages_disadvantages,
-    })),
-    rows: pair(decision.dimensions.map((d) => d.name), base.rows, (r) => r.dimension, "r").map(({ id, from }, i) => ({
-      id,
-      dimension: decision.dimensions[i].name,
-      cells: from?.cells ?? {},
-      analysis: decision.dimensions[i].analysis,
-      conclusion: decision.dimensions[i].conclusion,
-    })),
+    options,
+    rows: pair(decision.dimensions.map((d) => d.name), base.rows, (r) => r.dimension, "r").map(({ id, from }, i) => {
+      const dimension = decision.dimensions[i];
+      return {
+        id,
+        dimension: dimension.name,
+        // A cell the answer has no pros and cons for keeps what was typed in it
+        cells: Object.fromEntries(
+          options.map((option) => [
+            option.id,
+            dimension.options.find((o) => o.name.trim() === option.name.trim())?.pros_cons || from?.cells[option.id] || "",
+          ]),
+        ),
+        analysis: dimension.analysis,
+        conclusion: dimension.conclusion,
+      };
+    }),
     conclusion: decision.overall_conclusion,
   };
 }
@@ -242,7 +256,8 @@ export default function Decision({ config }: { config: Record<string, unknown> }
   /* The header's Generate button, pointed at simple-ai's decision endpoint rather than its edit
      one. The box opens on the question. The same question — or one asked of a sheet that had
      none — improves what is already written; a different one is a different decision, and
-     starts the sheet over. Registered once, so the target reads the card through this ref */
+     starts the sheet over. Either way the background goes along and stays. Registered once, so
+     the target reads the card through this ref */
   const liveRef = useRef({ comp, save });
   useEffect(() => {
     liveRef.current = { comp, save };
@@ -260,8 +275,8 @@ export default function Decision({ config }: { config: Record<string, unknown> }
         const asked = current.question.trim();
         const draft = toDraft(current);
         const improve = hasDraft(draft) && (!asked || asked === question);
-        const decision = await generateDecision(improve ? draft : question, signal);
-        return serialize(fill(improve ? current : EMPTY_SHEET, decision, question));
+        const decision = await generateDecision(improve ? draft : question, current.background, signal);
+        return serialize(fill(improve ? current : EMPTY_SHEET, decision, question, current.background));
       },
       onGenerated: (next) => {
         const { comp, save } = liveRef.current;
@@ -292,7 +307,7 @@ export default function Decision({ config }: { config: Record<string, unknown> }
   function addOption() {
     const id = nextId("o", sheet.options.map((o) => o.id));
     focusRef.current = `option:${id}`;
-    write({ options: [...sheet.options, { id, name: "", prosCons: "" }] });
+    write({ options: [...sheet.options, { id, name: "" }] });
   }
 
   function addRow() {
@@ -315,10 +330,9 @@ export default function Decision({ config }: { config: Record<string, unknown> }
   // There is no undo for a removed row or column, so one with anything typed in it asks first
   function requestRemove(target: Removal) {
     const row = sheet.rows.find((r) => r.id === target.id);
-    const option = sheet.options.find((o) => o.id === target.id);
     const texts =
       target.kind === "option"
-        ? [option?.name, option?.prosCons, ...sheet.rows.map((r) => r.cells[target.id])]
+        ? [sheet.options.find((o) => o.id === target.id)?.name, ...sheet.rows.map((r) => r.cells[target.id])]
         : [row?.dimension, row?.analysis, row?.conclusion, ...Object.values(row?.cells ?? {})];
     if (texts.some((value) => value?.trim())) setRemoval(target);
     else remove(target);
@@ -341,6 +355,11 @@ export default function Decision({ config }: { config: Record<string, unknown> }
         <button type="button" onClick={addOption}>{labels.addOption}</button>
         <button type="button" onClick={addRow}>{labels.addDimension}</button>
       </div>
+
+      <section className={`${styles.box} ${styles.background}`}>
+        <span className={styles.label}>{labels.background}</span>
+        <Field value={sheet.background} label={labels.background} onChange={(background) => write({ background })} />
+      </section>
 
       <div className={styles.tableWrap}>
         <table className={styles.table} style={{ minWidth: tableWidth }}>
@@ -373,23 +392,8 @@ export default function Decision({ config }: { config: Record<string, unknown> }
                   )}
                 </th>
               ))}
-              <th scope="col" rowSpan={2} className={styles.label}>{labels.analysis}</th>
-              <th scope="col" rowSpan={2} className={styles.label}>{labels.conclusion}</th>
-            </tr>
-            {/* Each option's own pros and cons, under its name */}
-            <tr className={styles.prosCons}>
-              <th scope="row" className={`${styles.dimension} ${styles.label}`}>{labels.prosCons}</th>
-              {sheet.options.map((option, index) => (
-                <td key={option.id}>
-                  <Field
-                    value={option.prosCons}
-                    label={`${option.name || `${labels.option} ${index + 1}`} · ${labels.prosCons}`}
-                    onChange={(prosCons) =>
-                      write({ options: sheet.options.map((o) => (o.id === option.id ? { ...o, prosCons } : o)) })
-                    }
-                  />
-                </td>
-              ))}
+              <th scope="col" className={styles.label}>{labels.analysis}</th>
+              <th scope="col" className={styles.label}>{labels.conclusion}</th>
             </tr>
           </thead>
           <tbody>

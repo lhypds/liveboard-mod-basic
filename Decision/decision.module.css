@@ -141,11 +141,6 @@
   vertical-align: bottom;
 }
 
-/* A row's label sits level with the first line of its text, however long that runs */
-.table .prosCons th.label {
-  vertical-align: top;
-}
-
 .removable .field > textarea,
 .removable .field::after {
   padding-right: 20px;
@@ -197,6 +192,12 @@
   overflow-wrap: anywhere;
 }
 
+/* A dimension's row starts two lines tall: two 18px lines (12px at 1.5) and the field's 6px padding
+   above and below. The textarea stretches to fill it, so the whole cell can be clicked into */
+.table tbody .field {
+  min-height: 48px;
+}
+
 .field > textarea {
   resize: none;
   overflow: hidden;
@@ -206,7 +207,7 @@
   color: inherit;
 }
 
-/* Overall analysis and overall conclusion, in that order under the table */
+/* Background over the table; overall analysis and overall conclusion, in that order under it */
 .box {
   display: flex;
   flex-direction: column;
@@ -226,10 +227,10 @@
 }
 
 /* Between them they take whatever height the table leaves, down to the foot of the card, the
-   analysis twice as tall as the conclusion. Both grow from nothing rather than from their text, so
-   the 2:1 holds exactly, and their minimums are 2:1 as well (152px and 76px), so it still holds once
-   the table outgrows the card and they scroll with the rest. Only text longer than a box stretches
-   it past its share. */
+   analysis twice as tall as the background and the conclusion. All grow from nothing rather than
+   from their text, so the 1:2:1 holds exactly, and their minimums are 1:2:1 as well (76px, 152px
+   and 76px), so it still holds once the table outgrows the card and they scroll with the rest.
+   Only text longer than a box stretches it past its share. */
 .analysis {
   flex: 2 0 0px;
 }
@@ -238,10 +239,12 @@
   min-height: 128px;
 }
 
+.background,
 .overall {
   flex: 1 0 0px;
 }
 
+.background .field,
 .overall .field {
   min-height: 52px;
 }
