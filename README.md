@@ -47,6 +47,7 @@ Under the table comes the overall analysis, then the overall conclusion; the two
 Every cell grows with what is typed into it; the dimension column stays in view while a table with many options scrolls sideways.
 Removing an option takes its column with it, so a row or column with anything typed in it asks first — there is no undo for it. The last option stays: one is enough to weigh a single choice on its own.
 The sheet is kept in `comp` (`question`, `analysis`, `options`, `rows` with their `cells` keyed by option id plus `analysis` and `conclusion`, `conclusion`), and ids are short and sequential (`o1`, `r1`) since they ride along in every board save.
+The board's Generate button fills the sheet through simple-ai's `/api/generate/decision` (via `/api/sc/generate/decision`, so it needs the SC account signed in). The box opens on the question: asked of an empty sheet, or changed, it generates a new decision; the same question sends the sheet as a draft to improve. The endpoint has no field for cells, so they are not sent — they stay under their option when its name comes back. It registers through `_setGenerate` with a `run` of its own, and the whole sheet is one JSON text, so a run is a single Ctrl+Z.
 
 `Calendar`
 

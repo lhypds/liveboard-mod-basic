@@ -30,6 +30,14 @@ export const config = {
             zh: "表格下方先写总分析，再写总结论。删除有内容的行或列前会先确认",
           },
         },
+        {
+          key: { en: "Generate", ja: "生成", zh: "生成" },
+          value: {
+            en: "The Generate button in the header fills the sheet from the question through simple-ai (sign in to an SC account first). The same question improves what is written; a new one starts over, and Ctrl+Z brings the old sheet back. Cells under options are kept but not sent",
+            ja: "ヘッダーの生成ボタンで、質問から simple-ai が表を埋めます（先に SC アカウントにログイン）。同じ質問なら今の内容を改善し、違う質問なら作り直します。Ctrl+Z で元に戻せます。選択肢ごとのセルは残りますが送信されません",
+            zh: "标题栏的生成按钮通过 simple-ai 根据问题填写表格（需先登录 SC 账号）。问题不变时完善已有内容，换了问题则重新生成，Ctrl+Z 可恢复原表。选项下的单元格会保留，但不会发送",
+          },
+        },
       ],
     },
   ],

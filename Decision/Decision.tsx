@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ConfirmModal from "@components/ConfirmModal";
+import { generateDecision, type Decision as Generated, type DecisionDraft } from "@utils/sc";
 import styles from "./decision.module.css";
 
 type Locale = "en" | "ja" | "zh";
@@ -35,6 +36,16 @@ type Row = { id: string; dimension: string; cells: Record<string, string>; analy
 type Sheet = { question: string; analysis: string; options: Option[]; rows: Row[]; conclusion: string };
 type Comp = Record<string, unknown> & { createdAt?: number; updatedAt?: number };
 type Removal = { kind: "option" | "row"; id: string };
+
+/* What the board's Generate button needs from this card (see Home.tsx). The sheet travels as
+   JSON, so a whole generated decision is one text — one write, and one Ctrl+Z */
+type GenerateTarget = {
+  content: () => string;
+  prompt: string;
+  onGenerated: (next: string) => void;
+  instruction: () => string;
+  run: (instruction: string, signal: AbortSignal) => Promise<string>;
+};
 
 /* Column widths in px: the table never gets narrower than their sum, and shares out whatever
    width the card has beyond that in the same proportions. More options scroll sideways. */
@@ -106,6 +117,72 @@ function nextId(prefix: string, taken: string[]): string {
 }
 
 /**
+ * The sheet as Generate reads and writes it. Always passed through readSheet first, so the same
+ * sheet is always the same text — which is what lets Ctrl+Z tell the card hasn't changed since.
+ */
+function serialize(sheet: Sheet): string {
+  return JSON.stringify(readSheet(sheet));
+}
+
+const EMPTY_SHEET: Sheet = { question: "", analysis: "", options: [], rows: [], conclusion: "" };
+
+/** The sheet as simple-ai's decision endpoint takes a draft. It has no place for cells, so they stay home */
+function toDraft(sheet: Sheet): DecisionDraft {
+  return {
+    options: sheet.options.map((option) => option.name),
+    dimensions: sheet.rows.map((row) => ({ name: row.dimension, analysis: row.analysis, conclusion: row.conclusion })),
+    overall_analysis: sheet.analysis,
+    overall_conclusion: sheet.conclusion,
+  };
+}
+
+// The endpoint refuses a draft with nothing written in it
+function hasDraft(draft: DecisionDraft): boolean {
+  return [
+    ...(draft.options ?? []),
+    ...(draft.dimensions ?? []).flatMap((d) => [d.name, d.analysis, d.conclusion]),
+    draft.overall_analysis ?? "",
+    draft.overall_conclusion ?? "",
+  ].some((value) => value.trim());
+}
+
+/**
+ * Which column or row each generated name lands in: the one already carrying that name, else the
+ * next one left over, else a new one. Keeping the id keeps the cells typed under it.
+ */
+function pair<T extends { id: string }>(names: string[], items: T[], nameOf: (item: T) => string, prefix: string) {
+  const left = [...items];
+  const named = names.map((name) => {
+    const index = left.findIndex((item) => nameOf(item).trim() === name.trim());
+    return index < 0 ? undefined : left.splice(index, 1)[0];
+  });
+  const taken = items.map((item) => item.id);
+  return named.map((item) => {
+    const from = item ?? left.shift();
+    const id = from?.id ?? nextId(prefix, taken);
+    taken.push(id);
+    return { id, from };
+  });
+}
+
+/** A generated decision written over `base` — a column or row it leaves out goes */
+function fill(base: Sheet, decision: Generated, question: string): Sheet {
+  return {
+    question,
+    analysis: decision.overall_analysis,
+    options: pair(decision.options, base.options, (o) => o.name, "o").map(({ id }, i) => ({ id, name: decision.options[i] })),
+    rows: pair(decision.dimensions.map((d) => d.name), base.rows, (r) => r.dimension, "r").map(({ id, from }, i) => ({
+      id,
+      dimension: decision.dimensions[i].name,
+      cells: from?.cells ?? {},
+      analysis: decision.dimensions[i].analysis,
+      conclusion: decision.dimensions[i].conclusion,
+    })),
+    conclusion: decision.overall_conclusion,
+  };
+}
+
+/**
  * A textarea that grows with what is typed into it. The hidden copy of the text under it is what
  * sizes the grid cell both share — `field-sizing` would do this alone, but not on the old iPad this
  * board is also read on.
@@ -154,6 +231,39 @@ export default function Decision({ config }: { config: Record<string, unknown> }
     stampedRef.current = true;
     save?.({ ...comp, createdAt: Date.now() });
   }, [comp, save]);
+
+  /* The header's Generate button, pointed at simple-ai's decision endpoint rather than its edit
+     one. The box opens on the question. The same question — or one asked of a sheet that had
+     none — improves what is already written; a different one is a different decision, and
+     starts the sheet over. Registered once, so the target reads the card through this ref */
+  const liveRef = useRef({ comp, save });
+  useEffect(() => {
+    liveRef.current = { comp, save };
+  });
+
+  useEffect(() => {
+    const setGenerate = config._setGenerate as ((target: GenerateTarget | null) => void) | undefined;
+    setGenerate?.({
+      content: () => serialize(readSheet(liveRef.current.comp)),
+      prompt: "",
+      instruction: () => readSheet(liveRef.current.comp).question,
+      run: async (instruction, signal) => {
+        const current = readSheet(liveRef.current.comp);
+        const question = instruction.trim();
+        const asked = current.question.trim();
+        const draft = toDraft(current);
+        const improve = hasDraft(draft) && (!asked || asked === question);
+        const decision = await generateDecision(improve ? draft : question, signal);
+        return serialize(fill(improve ? current : EMPTY_SHEET, decision, question));
+      },
+      onGenerated: (next) => {
+        const { comp, save } = liveRef.current;
+        save?.(stamped(comp, readSheet(JSON.parse(next) as Comp)));
+      },
+    });
+    return () => setGenerate?.(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // The added field only exists once the save has come back round as a render
   useLayoutEffect(() => {
