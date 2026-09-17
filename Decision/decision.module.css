@@ -1,0 +1,218 @@
+.decision {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  color: #0f172a;
+  font-size: 12px;
+}
+
+.decision::-webkit-scrollbar,
+.tableWrap::-webkit-scrollbar {
+  display: none;
+}
+
+/* The card scrolls as a whole, so nothing in it is squeezed to fit */
+.decision > * {
+  flex-shrink: 0;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.question {
+  box-sizing: border-box;
+  min-width: 0;
+  height: 26px;
+  flex: 1 1 auto;
+  padding: 2px 6px;
+  border: 1px solid #000;
+  border-radius: 0;
+  outline: none;
+  background: #fff;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bar button {
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid #000;
+  border-radius: 0;
+  background: #fff;
+  color: #000;
+  font-size: 10px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.bar button:hover {
+  background: #000;
+  color: #fff;
+}
+
+.bar button:focus-visible,
+.remove:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: -2px;
+}
+
+.question::placeholder,
+.field > textarea::placeholder {
+  color: #a3a3a3;
+  font-weight: 400;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+/* Separate borders rather than collapsed ones: a collapsed border belongs to neither cell, and
+   the sticky dimension column would slide out from under its own lines */
+.table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-top: 1px solid #000;
+}
+
+.table th,
+.table td {
+  position: relative;
+  padding: 0;
+  border-right: 1px solid #000;
+  border-bottom: 1px solid #000;
+  background: #fff;
+  text-align: left;
+  vertical-align: top;
+  font-weight: 400;
+}
+
+.table tr > :first-child {
+  border-left: 1px solid #000;
+}
+
+.table th:focus-within,
+.table td:focus-within,
+.overall:focus-within {
+  background: #f5f5f5;
+}
+
+/* The dimensions stay in view while a wide table scrolls sideways */
+.table .dimension {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+
+.table thead .dimension {
+  z-index: 2;
+}
+
+.table tbody .dimension,
+.table thead .removable {
+  font-weight: 600;
+}
+
+.label {
+  color: #525252;
+  font-family: var(--font-title);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.table th.label {
+  padding: 8px;
+  vertical-align: bottom;
+}
+
+.removable .field > textarea,
+.removable .field::after {
+  padding-right: 20px;
+}
+
+.remove {
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #a3a3a3;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.remove:hover {
+  color: #000;
+}
+
+/* The textarea and a hidden copy of its text share one grid cell, and the copy is what gives the
+   cell its height — so the box grows as it is typed into, with no measuring script */
+.field {
+  display: grid;
+}
+
+.field::after {
+  content: attr(data-value) " ";
+  visibility: hidden;
+  white-space: pre-wrap;
+}
+
+.field > textarea,
+.field::after {
+  grid-area: 1 / 1 / 2 / 2;
+  box-sizing: border-box;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 8px;
+  border: 0;
+  font: inherit;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.field > textarea {
+  resize: none;
+  overflow: hidden;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+}
+
+/* Takes whatever height the table leaves, down to the foot of the card, and all of it is the box
+   to type in. Once the table outgrows the card it keeps its minimum and scrolls with the rest. */
+.overall {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #000;
+  background: #fff;
+}
+
+.overall > .label {
+  padding: 8px 8px 0;
+}
+
+.overall .field {
+  flex: 1 0 auto;
+  min-height: 52px;
+}

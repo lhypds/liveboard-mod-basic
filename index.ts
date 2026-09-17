@@ -6,6 +6,7 @@ import * as Weather from "./Weather";
 import * as Chat from "./Chat";
 import * as Code from "./Code";
 import * as Compare from "./Compare";
+import * as Decision from "./Decision";
 import * as Calendar from "./Calendar";
 import * as Clock from "./Clock";
 import * as Map from "./Map";
@@ -46,6 +47,7 @@ const avaliableModules: Record<string, ModuleEntry> = {
   Chat: { component: Chat.default, config: Chat.config },
   Code: { component: Code.default, config: Code.config },
   Compare: { component: Compare.default, config: Compare.config },
+  Decision: { component: Decision.default, config: Decision.config },
   Calendar: { component: Calendar.default, config: Calendar.config },
   Clock: { component: Clock.default, config: Clock.config },
   Map: { component: Map.default, config: Map.config },

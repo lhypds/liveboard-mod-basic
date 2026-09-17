@@ -40,6 +40,13 @@ The center shows a line diff with line numbers, light green additions and light 
 Files stay in the browser tab and are cleared on reload. Each side supports up to 512 KB and 5,000 lines;
 very large change sets ask you to compare smaller sections. CRLF/LF differences are ignored, while final newline changes are shown.
 
+`Decision`
+
+Weighs one or more options against each other as a table: one column per option, one row per dimension, and a conclusion for each dimension in the last column, with the overall conclusion under the table.
+Every cell grows with what is typed into it; the dimension column stays in view while a table with many options scrolls sideways.
+Removing an option takes its column with it, so a row or column with anything typed in it asks first — there is no undo for it. The last option stays: one is enough to weigh a single choice on its own.
+The sheet is kept in `comp` (`question`, `options`, `rows` with their `cells` keyed by option id, `conclusion`), and ids are short and sequential (`o1`, `r1`) since they ride along in every board save.
+
 `Calendar`
 
 Compact month calendar with localized labels, date selection, month navigation and configurable Sunday/Monday week starts.

@@ -19,6 +19,10 @@
     "enabled": true,
     "allowMultipleInstances": true
   },
+  "Decision": {
+    "enabled": true,
+    "allowMultipleInstances": true
+  },
   "Calendar": {
     "enabled": true,
     "allowMultipleInstances": true
