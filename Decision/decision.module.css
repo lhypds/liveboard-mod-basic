@@ -73,9 +73,12 @@
   font-weight: 400;
 }
 
+/* Isolated so the sticky column's z-index only lifts it over the table's own cells, not over the
+   board's veil while the card is generating */
 .tableWrap {
   overflow-x: auto;
   scrollbar-width: none;
+  isolation: isolate;
 }
 
 /* Separate borders rather than collapsed ones: a collapsed border belongs to neither cell, and
